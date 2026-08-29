@@ -10,7 +10,10 @@ use clap::Parser;
 use tracing::info;
 
 #[derive(Parser, Debug)]
-#[command(name = "heimdallr", about = "Heimdallr - DNS watcher (from-zero, OSL-3.0)")]
+#[command(
+    name = "heimdallr",
+    about = "Heimdallr - DNS watcher (from-zero, OSL-3.0)"
+)]
 struct Args {
     /// Config TOML path (default /etc/heimdallr/heimdallr.toml if exists, else built-in defaults)
     #[arg(long)]
@@ -39,7 +42,11 @@ async fn main() -> anyhow::Result<()> {
     let cfg = load_config(&args)?;
 
     if args.check_config {
-        println!("config OK: {} listen={:?}", args.config.as_deref().unwrap_or("<defaults>"), cfg.listen);
+        println!(
+            "config OK: {} listen={:?}",
+            args.config.as_deref().unwrap_or("<defaults>"),
+            cfg.listen
+        );
         return Ok(());
     }
 
@@ -47,7 +54,10 @@ async fn main() -> anyhow::Result<()> {
     info!("config: {}", args.config.as_deref().unwrap_or("<defaults>"));
     let dnssec_provider = cfg.dnssec.provider.clone();
     let provider = core::dnssec::provider_for(&dnssec_provider);
-    info!("dnssec provider: {} (ring default, botan optional)", provider.name());
+    info!(
+        "dnssec provider: {} (ring default, botan optional)",
+        provider.name()
+    );
     info!("net: listen={:?} api={}", cfg.listen, cfg.api.listen);
 
     // Wire per docs/architecture.md — net ↔ core ↔ api (channels, not shared Mutex)

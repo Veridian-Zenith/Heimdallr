@@ -2,7 +2,7 @@
 //! Axum router — `M6` logs+settings+zones, `M7` auth RBAC+TOTP+OIDC.
 
 use anyhow::Result;
-use axum::{routing::get, Json, Router};
+use axum::{Json, Router, routing::get};
 use serde::Serialize;
 use tracing::info;
 
@@ -25,7 +25,9 @@ pub struct Api {
 
 impl Api {
     pub fn new(listen: impl Into<String>) -> Self {
-        Self { listen: listen.into() }
+        Self {
+            listen: listen.into(),
+        }
     }
 
     pub async fn run(self) -> Result<()> {

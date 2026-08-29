@@ -1,13 +1,11 @@
-# Heimdallr example config — see docs/configuration.md for reference
-# Mirrors Galdr/config/galdr.toml style, Technitium DnsServerCore settings parity.
-
-listen = ["0.0.0.0:53", "[::]:53"]
-listen_tls = ["0.0.0.0:853"]
+listen = ["127.0.0.1:5354"]
+listen_tls = []
 listen_quic = []
 listen_https = []
 
 [resolver]
-forwarders = ["1.1.1.1:53", "8.8.8.8:53"]
+# Isolated test — do NOT forward to 127.0.0.1:53 (Technitium live). Use Quad9 9.9.9.11 only (host-reachable, verified dig @9.9.9.11 ok, while 1.1.1.1/8.8.8.8 blocked).
+forwarders = ["9.9.9.11:53"]
 forward_protocol = "udp"
 qname_minimization = true
 qname_randomization = false
@@ -19,13 +17,11 @@ timeout_ms = 2000
 size = 50000
 serve_stale = true
 prefetch = 2
-# persistent = "/var/lib/heimdallr/cache.bin"
 
 [dnssec]
 validation = true
-# anchors = "/var/lib/heimdallr/root-anchors.xml"
 signing = false
-provider = "ring"  # ring | botan (needs --features botan-crypto)
+provider = "ring"
 
 [filter]
 blocklists = []
@@ -40,7 +36,7 @@ allow = []
 protocol = "v2"
 
 [api]
-listen = "0.0.0.0:5380"
+listen = "127.0.0.1:5381"
 
 [auth]
 totp = true

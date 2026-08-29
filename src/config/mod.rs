@@ -313,7 +313,10 @@ impl Config {
 
     pub fn validate(&self) -> Result<()> {
         if self.dnssec.provider != "ring" && self.dnssec.provider != "botan" {
-            anyhow::bail!("dnssec.provider must be ring|botan, got {}", self.dnssec.provider);
+            anyhow::bail!(
+                "dnssec.provider must be ring|botan, got {}",
+                self.dnssec.provider
+            );
         }
         #[cfg(not(feature = "botan-crypto"))]
         if self.dnssec.provider == "botan" {
