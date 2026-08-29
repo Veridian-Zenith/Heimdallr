@@ -27,7 +27,8 @@ jobs:
         run: |
           cargo tree | grep -iE "openssl|bssl|aws-lc" && echo "banned crypto found" && exit 1 || echo "clean: ring only"
       - name: Audit
-        run: cargo install cargo-audit --locked && cargo audit --ignore RUSTSEC-2026-0118 --ignore RUSTSEC-2026-0119 || echo "audit: known hickory-proto 0.25 vulns ignored (0.26 breaking API, see ROADMAP)"
+        run: |
+          cargo install cargo-audit --locked && cargo audit --ignore RUSTSEC-2026-0118 --ignore RUSTSEC-2026-0119 || echo "audit known hickory-proto 0.25 vulns ignored (0.26 breaking API, see ROADMAP)"
       - name: Build
         run: cargo build
       - name: Test
