@@ -24,7 +24,8 @@ jobs:
       - name: Clippy
         run: cargo clippy -- -D warnings
       - name: OpenSSL ban (default must be pure ring)
-        run: cargo tree | grep -iE "openssl|bssl|aws-lc" && echo "banned crypto found" && exit 1 || echo "clean: ring only"
+        run: |
+          cargo tree | grep -iE "openssl|bssl|aws-lc" && echo "banned crypto found" && exit 1 || echo "clean: ring only"
       - name: Audit
         run: cargo install cargo-audit --locked && cargo audit
       - name: Build
