@@ -1,0 +1,62 @@
+# Heimdallr example config — see docs/configuration.md for reference
+# Mirrors Galdr/config/galdr.toml style, Technitium DnsServerCore settings parity.
+
+listen = ["0.0.0.0:53", "[::]:53"]
+listen_tls = ["0.0.0.0:853"]
+listen_quic = []
+listen_https = []
+
+[resolver]
+forwarders = ["1.1.1.1:53", "8.8.8.8:53"]
+forward_protocol = "udp"
+qname_minimization = true
+qname_randomization = false
+ecs = false
+concurrency = 2
+timeout_ms = 2000
+
+[cache]
+size = 50000
+serve_stale = true
+prefetch = 2
+# persistent = "/var/lib/heimdallr/cache.bin"
+
+[dnssec]
+validation = true
+# anchors = "/var/lib/heimdallr/root-anchors.xml"
+signing = false
+provider = "ring"  # ring | botan (needs --features botan-crypto)
+
+[filter]
+blocklists = []
+allowlists = []
+regex_blocklist = []
+cname_cloaking = true
+rebinding = true
+
+[proxy]
+enable = false
+allow = []
+protocol = "v2"
+
+[api]
+listen = "0.0.0.0:5380"
+
+[auth]
+totp = true
+oidc = false
+
+[log]
+level = "info"
+format = "json"
+
+[dhcp]
+enable = false
+
+[cluster]
+enable = false
+
+[[zones]]
+name = "example.test."
+kind = "primary"
+file = "/var/lib/heimdallr/zones/example.test.zone"

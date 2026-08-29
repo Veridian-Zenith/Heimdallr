@@ -1,0 +1,19 @@
+[Unit]
+Description=Heimdallr DNS - Watcher at the Bifrost (OSL-3.0, pure ring, no libmsquic)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=heimdallr
+Group=heimdallr
+ExecStart=/usr/local/bin/heimdallr --config /etc/heimdallr/heimdallr.toml
+Restart=on-failure
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/heimdallr /var/log/heimdallr
+
+[Install]
+WantedBy=multi-user.target
