@@ -11,8 +11,9 @@
 use std::io;
 
 use async_trait::async_trait;
-use hickory_resolver::Resolver as HickoryResolver;
 use hickory_net::runtime::TokioRuntimeProvider;
+use hickory_proto::rr::TSigResponseContext;
+use hickory_resolver::Resolver as HickoryResolver;
 use hickory_server::dnssec::NxProofKind;
 use hickory_server::proto::op::{Message, Query, ResponseCode};
 use hickory_server::proto::rr::{LowerName, Name, Record, RecordType};
@@ -21,7 +22,7 @@ use hickory_server::zone_handler::{
     AuthLookup, LookupControlFlow, LookupError, LookupOptions, Nsec3QueryInfo, ZoneHandler,
     ZoneType,
 };
-use hickory_proto::rr::TSigResponseContext;
+
 use tracing::{debug, warn};
 
 use crate::core::cache::{CacheKey, SharedCache};
