@@ -2,6 +2,7 @@
 Description=Heimdallr DNS - Watcher at the Bifrost (OSL-3.0, pure ring)
 Wants=network-online.target
 After=network-online.target
+After=sysusers.service
 
 [Service]
 Type=simple
@@ -9,11 +10,35 @@ User=heimdallr
 Group=heimdallr
 ExecStart=/opt/heimdallr/heimdallr --config /etc/heimdallr/config.toml
 Restart=on-failure
+RestartSec=5
+
+# Capabilities — bind port 53 without root
 AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+# Hardening
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
-ReadWritePaths=/opt/heimdallr /etc/heimdallr /var/lib/heimdallr /var/log/heimdallr
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+
+# Filesystem — read-only except state/log dirs
+ReadOnlyPaths=/opt/heimdallr /etc/heimdallr /etc/letsencrypt
+ReadWritePaths=/var/lib/heimdallr /var/log/heimdallr
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=heimdallr
 
 [Install]
 WantedBy=multi-user.target
