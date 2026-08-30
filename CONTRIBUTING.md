@@ -33,7 +33,7 @@ If you touch boot/service behavior, paste `systemctl status heimdallr` and `jour
 
 - Bugs with repro: issue → exact `cargo`/`dig`/`kdig` commands + `RUST_LOG=debug` output.
 - Security: `SECURITY.md` private channel — never issues.
-- Contact: [daedaevibin@ik.me](mailto:daedaevibin@ik.me) | [@daedaevibin:matrix.org](https://matrix.to/@daedaevibin:matrix.org#/@daedaevibin:matrix.org) | [Discord](https://discord.gg/Vprc6XRkRg)
+- Contact: [daedaevibin@ik.me](mailto:daedaevibin@ik.me) | [@daedaevibin:matrix.org](https://matrix.to/@daedaevibin:matrix.org#/@daedaevibin:matrix.org) | [Discord](https://discord.gg/Vprc6XRkRg) (email me when you join so I see it)
 
 ## Licensing
 

@@ -9,7 +9,7 @@ Use GitHub's private security advisory (Security tab → Report a vulnerability)
 - **Email:** [daedaevibin@ik.me](mailto:daedaevibin@ik.me)
 - **Matrix:** [@daedaevibin:matrix.org](https://matrix.to/@daedaevibin:matrix.org#/@daedaevibin:matrix.org)
 - **Mastodon:** [@daedaevibin@defcon.social](https://defcon.social/@daedaevibin)
-- **Discord:** [Veridian Zenith](https://discord.gg/Vprc6XRkRg)
+- **Discord:** [Veridian Zenith](https://discord.gg/Vprc6XRkRg) (message [daedaevibin@ik.me](mailto:daedaevibin@ik.me) when you send a join request so I see it)
 
 Do not open a public issue for anything exploitable. Do not disclose externally until a fix is released.
 

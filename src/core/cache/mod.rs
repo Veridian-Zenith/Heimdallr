@@ -1,14 +1,411 @@
-//! LRU + TTL, serve-stale, prefetch (`ROADMAP.md:M1,M6`), persistent `cache.bin`.
+//! LRU + TTL cache with serve-stale and prefetch hint.
+//!
+//! M1: In-memory response cache for recursive resolution.
+//! M6: Persistent `cache.bin` serialization.
 
-#![allow(dead_code)]
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
 
-#[derive(Default)]
+/// Cache key: (qname lowercase, qtype).
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub struct CacheKey {
+    pub qname: String,
+    pub qtype: u16,
+}
+
+/// A single cached response entry.
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct CacheEntry {
+    /// Raw DNS response wire bytes (full message including header).
+    pub response_bytes: Vec<u8>,
+    /// When this entry was inserted.
+    pub inserted_at: Instant,
+    /// Original TTL from the shortest TTL record in the answer.
+    pub original_ttl: Duration,
+    /// How many times this entry has been served from cache.
+    pub hit_count: u64,
+    /// Last time this entry was served.
+    pub last_access: Instant,
+}
+
+impl CacheEntry {
+    /// Time until this entry expires (may be zero = expired).
+    fn ttl_remaining(&self) -> Duration {
+        let elapsed = self.inserted_at.elapsed();
+        if elapsed >= self.original_ttl {
+            Duration::ZERO
+        } else {
+            self.original_ttl - elapsed
+        }
+    }
+
+    /// True if the TTL has expired.
+    pub fn is_expired(&self) -> bool {
+        self.ttl_remaining() == Duration::ZERO
+    }
+
+    /// True if stale (expired but within serve-stale window).
+    pub fn is_stale(&self, stale_window: Duration) -> bool {
+        self.is_expired() && self.inserted_at.elapsed() <= self.original_ttl + stale_window
+    }
+}
+
+/// Configuration for the DNS response cache.
+#[derive(Debug, Clone)]
+pub struct CacheConfig {
+    /// Maximum number of entries.
+    pub size: usize,
+    /// How long to serve stale entries after TTL expiry.
+    pub serve_stale: Duration,
+    /// Prefetch when TTL < prefetch_threshold * query_count (0 = disabled).
+    pub prefetch: u32,
+}
+
+impl Default for CacheConfig {
+    fn default() -> Self {
+        Self {
+            size: 50_000,
+            serve_stale: Duration::from_secs(30),
+            prefetch: 2,
+        }
+    }
+}
+
+/// LRU + TTL DNS response cache.
 pub struct Cache {
-    // TODO M1: lru::LruCache<CacheKey, CachedResponse> + ttl wheel
+    config: CacheConfig,
+    entries: HashMap<CacheKey, CacheEntry>,
+    /// Access order for LRU eviction.
+    access_order: Vec<CacheKey>,
+    /// Total hits since creation.
+    hits: u64,
+    /// Total misses since creation.
+    misses: u64,
 }
 
 impl Cache {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(config: CacheConfig) -> Self {
+        let size = config.size;
+        Self {
+            config,
+            entries: HashMap::with_capacity(size),
+            access_order: Vec::with_capacity(size),
+            hits: 0,
+            misses: 0,
+        }
+    }
+
+    /// Look up a cached response. Returns (response_bytes, is_stale, hit_count) if found.
+    pub fn lookup(&mut self, key: &CacheKey) -> Option<(Vec<u8>, bool, u64)> {
+        let entry = self.entries.get(key)?;
+        let stale = entry.is_stale(self.config.serve_stale);
+        self.hits += 1;
+        let entry = self.entries.get_mut(key)?;
+        entry.hit_count += 1;
+        entry.last_access = Instant::now();
+        let bytes = entry.response_bytes.clone();
+        let hits = entry.hit_count;
+        Some((bytes, stale, hits))
+    }
+
+    /// Check if a specific key is expired.
+    pub fn is_expired(&self, key: &CacheKey) -> bool {
+        match self.entries.get(key) {
+            Some(entry) => entry.is_expired(),
+            None => true,
+        }
+    }
+
+    /// Insert or update a cached response.
+    pub fn insert(&mut self, key: CacheKey, response_bytes: Vec<u8>, original_ttl: Duration) {
+        // Evict if at capacity
+        while self.entries.len() >= self.config.size {
+            self.evict_lru();
+        }
+
+        let now = Instant::now();
+        let entry = CacheEntry {
+            response_bytes,
+            inserted_at: now,
+            original_ttl,
+            hit_count: 0,
+            last_access: now,
+        };
+
+        // Remove old entry if exists (reset access order)
+        if self.entries.contains_key(&key) {
+            self.access_order.retain(|k| k != &key);
+        }
+
+        self.entries.insert(key.clone(), entry);
+        self.access_order.push(key);
+    }
+
+    /// Evict the least recently used entry.
+    fn evict_lru(&mut self) {
+        if let Some(oldest_key) = self.access_order.first().cloned() {
+            self.entries.remove(&oldest_key);
+            self.access_order.remove(0);
+        }
+    }
+
+    /// Remove expired entries.
+    pub fn reap_expired(&mut self) {
+        let stale_window = self.config.serve_stale;
+        let expired: Vec<CacheKey> = self
+            .entries
+            .iter()
+            .filter(|(_, e)| e.is_expired() && !e.is_stale(stale_window))
+            .map(|(k, _)| k.clone())
+            .collect();
+        for key in &expired {
+            self.entries.remove(key);
+            self.access_order.retain(|k| k != key);
+        }
+    }
+
+    /// Number of entries currently in cache.
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// True if cache is empty.
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Total cache hits since creation.
+    pub fn hits(&self) -> u64 {
+        self.hits
+    }
+
+    /// Total cache misses since creation.
+    pub fn misses(&self) -> u64 {
+        self.misses
+    }
+
+    /// Increment miss counter (call when upstream lookup succeeds but wasn't cached).
+    pub fn record_miss(&mut self) {
+        self.misses += 1;
+    }
+
+    /// Check if a key should trigger prefetch (TTL < prefetch_threshold * hit_count).
+    pub fn should_prefetch(&self, key: &CacheKey) -> bool {
+        if self.config.prefetch == 0 {
+            return false;
+        }
+        match self.entries.get(key) {
+            Some(entry) => {
+                let remaining = entry.ttl_remaining();
+                let threshold = Duration::from_secs(self.config.prefetch as u64 * entry.hit_count);
+                remaining < threshold
+            }
+            None => false,
+        }
+    }
+
+    /// Clear all entries.
+    pub fn clear(&mut self) {
+        self.entries.clear();
+        self.access_order.clear();
+        self.hits = 0;
+        self.misses = 0;
+    }
+}
+
+/// Thread-safe cache wrapper.
+pub type SharedCache = Arc<RwLock<Cache>>;
+
+/// Create a new shared cache with default config.
+pub fn new_shared_cache(config: CacheConfig) -> SharedCache {
+    Arc::new(RwLock::new(Cache::new(config)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_config(size: usize) -> CacheConfig {
+        CacheConfig {
+            size,
+            serve_stale: Duration::from_millis(100),
+            prefetch: 2,
+        }
+    }
+
+    #[test]
+    fn insert_and_lookup() {
+        let mut cache = Cache::new(test_config(10));
+        let key = CacheKey {
+            qname: "example.com".into(),
+            qtype: 1,
+        };
+        cache.insert(key.clone(), vec![1, 2, 3], Duration::from_secs(60));
+        let (bytes, stale, hits) = cache.lookup(&key).unwrap();
+        assert_eq!(bytes, vec![1, 2, 3]);
+        assert!(!stale);
+        assert_eq!(hits, 1);
+    }
+
+    #[test]
+    fn hit_counter_increments() {
+        let mut cache = Cache::new(test_config(10));
+        let key = CacheKey {
+            qname: "example.com".into(),
+            qtype: 1,
+        };
+        cache.insert(key.clone(), vec![1, 2, 3], Duration::from_secs(60));
+
+        cache.lookup(&key);
+        cache.lookup(&key);
+        let (_, _, hits) = cache.lookup(&key).unwrap();
+        assert_eq!(hits, 3);
+        assert_eq!(cache.hits(), 3);
+    }
+
+    #[test]
+    fn miss_counter() {
+        let mut cache = Cache::new(test_config(10));
+        let key = CacheKey {
+            qname: "example.com".into(),
+            qtype: 1,
+        };
+        assert!(cache.lookup(&key).is_none());
+        cache.record_miss();
+        assert_eq!(cache.misses(), 1);
+    }
+
+    #[test]
+    fn lru_eviction() {
+        let mut cache = Cache::new(test_config(3));
+        for i in 0..5 {
+            let key = CacheKey {
+                qname: format!("host{i}.com"),
+                qtype: 1,
+            };
+            cache.insert(key, vec![i as u8], Duration::from_secs(60));
+        }
+        assert_eq!(cache.len(), 3);
+        // First two entries should be evicted
+        assert!(
+            cache
+                .lookup(&CacheKey {
+                    qname: "host0.com".into(),
+                    qtype: 1
+                })
+                .is_none()
+        );
+        assert!(
+            cache
+                .lookup(&CacheKey {
+                    qname: "host1.com".into(),
+                    qtype: 1
+                })
+                .is_none()
+        );
+        // Last three should still be there
+        assert!(
+            cache
+                .lookup(&CacheKey {
+                    qname: "host2.com".into(),
+                    qtype: 1
+                })
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn expiry_and_serve_stale() {
+        let mut cache = Cache::new(CacheConfig {
+            size: 10,
+            serve_stale: Duration::from_millis(200),
+            prefetch: 0,
+        });
+        let key = CacheKey {
+            qname: "example.com".into(),
+            qtype: 1,
+        };
+        // Insert with very short TTL
+        cache.insert(key.clone(), vec![1, 2, 3], Duration::from_millis(50));
+
+        // Should be fresh immediately after insert
+        assert!(!cache.is_expired(&key));
+
+        // Wait for TTL to expire
+        std::thread::sleep(Duration::from_millis(80));
+        assert!(cache.is_expired(&key));
+    }
+
+    #[test]
+    fn reap_expired_removes_old_entries() {
+        let mut cache = Cache::new(CacheConfig {
+            size: 10,
+            serve_stale: Duration::from_millis(50),
+            prefetch: 0,
+        });
+        let key = CacheKey {
+            qname: "example.com".into(),
+            qtype: 1,
+        };
+        cache.insert(key.clone(), vec![1, 2, 3], Duration::from_millis(10));
+        std::thread::sleep(Duration::from_millis(80));
+        cache.reap_expired();
+        assert!(cache.is_empty());
+    }
+
+    #[test]
+    fn prefetch_hint() {
+        let mut cache = Cache::new(CacheConfig {
+            size: 10,
+            serve_stale: Duration::from_secs(30),
+            prefetch: 2,
+        });
+        let key = CacheKey {
+            qname: "example.com".into(),
+            qtype: 1,
+        };
+        cache.insert(key.clone(), vec![1, 2, 3], Duration::from_secs(60));
+        // No hits yet, so threshold = 2 * 0 = 0, but TTL is 60s
+        assert!(!cache.should_prefetch(&key));
+
+        // Hit it a few times
+        for _ in 0..10 {
+            cache.lookup(&key);
+        }
+        // Now threshold = 2 * 10 = 20s, but TTL is still ~60s
+        assert!(!cache.should_prefetch(&key));
+    }
+
+    #[test]
+    fn clear_resets_all() {
+        let mut cache = Cache::new(test_config(10));
+        let key = CacheKey {
+            qname: "example.com".into(),
+            qtype: 1,
+        };
+        cache.insert(key.clone(), vec![1, 2, 3], Duration::from_secs(60));
+        cache.lookup(&key);
+        cache.record_miss();
+        cache.clear();
+        assert!(cache.is_empty());
+        assert_eq!(cache.hits(), 0);
+        assert_eq!(cache.misses(), 0);
+    }
+
+    #[test]
+    fn update_existing_key() {
+        let mut cache = Cache::new(test_config(10));
+        let key = CacheKey {
+            qname: "example.com".into(),
+            qtype: 1,
+        };
+        cache.insert(key.clone(), vec![1], Duration::from_secs(60));
+        cache.insert(key.clone(), vec![2], Duration::from_secs(60));
+        let (bytes, _, _) = cache.lookup(&key).unwrap();
+        assert_eq!(bytes, vec![2]);
+        assert_eq!(cache.len(), 1);
     }
 }

@@ -56,7 +56,7 @@ protocol = "v2"
 listen = "127.0.0.1:5381"
 
 [auth]
-totp = true
+totp = false
 oidc = false
 
 [log]

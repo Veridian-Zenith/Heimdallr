@@ -12,14 +12,14 @@ pub struct Config {
     #[serde(default)]
     pub hostadmin: Option<String>,
     pub listen: Vec<String>,
-    #[serde(default = "default_listen_tls")]
+    #[serde(default)]
     pub listen_tls: Vec<String>,
     #[serde(default)]
     pub listen_quic: Vec<String>,
     #[serde(default)]
     pub listen_https: Vec<String>,
     /// TLS certificate config. If omitted, auto-detected from Let's Encrypt
-    /// at `/etc/letsencrypt/live/<host>/` (cert.pem + privkey.pem).
+    /// at `/etc/letsencrypt/live/<host>/` (fullchain.pem + privkey.pem).
     #[serde(default)]
     pub tls: TlsConfig,
     #[serde(default)]
@@ -53,12 +53,10 @@ fn default_host() -> String {
 }
 
 fn default_zones_dir() -> String {
-    "/opt/heimdallr/zones".into()
+    "/etc/heimdallr/zones".into()
 }
 
-fn default_listen_tls() -> Vec<String> {
-    vec!["0.0.0.0:853".into()]
-}
+// ── Resolver ──────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResolverConfig {
@@ -108,6 +106,8 @@ impl Default for ResolverConfig {
     }
 }
 
+// ── Cache ─────────────────────────────────────────────────────────────────────
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CacheConfig {
     #[serde(default = "default_cache_size")]
@@ -120,7 +120,7 @@ pub struct CacheConfig {
     pub persistent: Option<String>,
 }
 fn default_cache_size() -> usize {
-    50000
+    50_000
 }
 fn default_prefetch() -> u8 {
     2
@@ -136,6 +136,8 @@ impl Default for CacheConfig {
     }
 }
 
+// ── DNSSEC ────────────────────────────────────────────────────────────────────
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DnssecConfig {
     #[serde(default = "default_true")]
@@ -145,7 +147,7 @@ pub struct DnssecConfig {
     #[serde(default)]
     pub signing: bool,
     #[serde(default = "default_provider")]
-    pub provider: String, // ring | botan
+    pub provider: String,
 }
 fn default_provider() -> String {
     "ring".into()
@@ -161,7 +163,9 @@ impl Default for DnssecConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+// ── Filter ────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FilterConfig {
     #[serde(default)]
     pub blocklists: Vec<String>,
@@ -177,13 +181,28 @@ pub struct FilterConfig {
     pub rebinding: bool,
 }
 
+impl Default for FilterConfig {
+    fn default() -> Self {
+        Self {
+            blocklists: vec![],
+            allowlists: vec![],
+            regex_blocklist: vec![],
+            per_client: std::collections::HashMap::new(),
+            cname_cloaking: default_true(),
+            rebinding: default_true(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PerClientFilter {
     #[serde(default)]
     pub block: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+// ── Proxy ─────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyConfig {
     #[serde(default)]
     pub enable: bool,
@@ -192,9 +211,21 @@ pub struct ProxyConfig {
     #[serde(default = "default_proxy_proto")]
     pub protocol: String,
 }
+
+impl Default for ProxyConfig {
+    fn default() -> Self {
+        Self {
+            enable: false,
+            allow: vec![],
+            protocol: default_proxy_proto(),
+        }
+    }
+}
 fn default_proxy_proto() -> String {
     "v2".into()
 }
+
+// ── API ───────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiConfig {
@@ -206,7 +237,7 @@ pub struct ApiConfig {
     pub tls_key: Option<String>,
 }
 fn default_api_listen() -> String {
-    "0.0.0.0:5380".into()
+    "127.0.0.1:5380".into()
 }
 impl Default for ApiConfig {
     fn default() -> Self {
@@ -218,13 +249,15 @@ impl Default for ApiConfig {
     }
 }
 
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AuthConfig {
     #[serde(default)]
     pub users: Vec<AuthUser>,
     #[serde(default)]
     pub tokens: Vec<AuthToken>,
-    #[serde(default = "default_true")]
+    #[serde(default)]
     pub totp: bool,
     #[serde(default)]
     pub oidc: bool,
@@ -241,6 +274,8 @@ pub struct AuthToken {
     pub name: String,
     pub value: String,
 }
+
+// ── Log ───────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogConfig {
@@ -267,6 +302,8 @@ impl Default for LogConfig {
     }
 }
 
+// ── DHCP ──────────────────────────────────────────────────────────────────────
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DhcpConfig {
     #[serde(default)]
@@ -283,6 +320,8 @@ pub struct DhcpRange {
     pub router: String,
 }
 
+// ── Cluster ───────────────────────────────────────────────────────────────────
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ClusterConfig {
     #[serde(default)]
@@ -291,29 +330,26 @@ pub struct ClusterConfig {
     pub peers: Vec<String>,
 }
 
+// ── Zones ─────────────────────────────────────────────────────────────────────
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ZoneConfig {
     pub name: String,
-    pub kind: String, // primary | secondary | stub | conditional | forwarder
+    pub kind: String,
     #[serde(default)]
     pub file: Option<String>,
     #[serde(default)]
     pub primaries: Vec<String>,
 }
 
-/// TLS certificate configuration. Used by DoT, DoH, and DoQ listeners.
-///
-/// If both `cert` and `key` are omitted, auto-detected from Let's Encrypt at
-/// `/etc/letsencrypt/live/<host>/` (cert.pem + privkey.pem).
+// ── TLS ───────────────────────────────────────────────────────────────────────
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TlsConfig {
-    /// Explicit cert path. None = auto-detect from Let's Encrypt.
     #[serde(default)]
     pub cert: Option<String>,
-    /// Explicit key path. None = auto-detect from Let's Encrypt.
     #[serde(default)]
     pub key: Option<String>,
-    /// Let's Encrypt base dir. Defaults to `/etc/letsencrypt/live`.
     #[serde(default = "default_letsencrypt_dir")]
     pub letsencrypt_dir: String,
 }
@@ -368,13 +404,15 @@ impl TlsConfig {
     }
 }
 
+// ── Config ────────────────────────────────────────────────────────────────────
+
 impl Default for Config {
     fn default() -> Self {
         Self {
             host: default_host(),
             hostadmin: None,
             listen: vec!["0.0.0.0:53".into(), "[::]:53".into()],
-            listen_tls: default_listen_tls(),
+            listen_tls: vec![],
             listen_quic: vec![],
             listen_https: vec![],
             resolver: ResolverConfig::default(),
@@ -408,10 +446,8 @@ impl Config {
     pub fn soa_rname(&self) -> String {
         let email = self.hostadmin.as_deref().unwrap_or("hostadmin");
         if email.contains('@') {
-            // "admin@example.test" -> "admin.example.test"
             email.replace('@', ".")
         } else {
-            // Bare name like "admin" — append @host
             let host = self.host.trim_end_matches('.');
             format!("{email}.{host}")
         }
@@ -424,6 +460,7 @@ impl Config {
     }
 
     pub fn validate(&self) -> Result<()> {
+        // DNSSEC provider
         if self.dnssec.provider != "ring" && self.dnssec.provider != "botan" {
             anyhow::bail!(
                 "dnssec.provider must be ring|botan, got {}",
@@ -434,6 +471,99 @@ impl Config {
         if self.dnssec.provider == "botan" {
             anyhow::bail!("botan provider requires --features botan-crypto");
         }
+
+        // Forward protocol
+        match self.resolver.forward_protocol.as_str() {
+            "udp" | "tcp" | "dot" | "doh" | "doq" => {}
+            other => {
+                anyhow::bail!("resolver.forward_protocol must be udp|tcp|dot|doh|doq, got {other}");
+            }
+        }
+
+        // Concurrency range
+        if self.resolver.concurrency == 0 {
+            anyhow::bail!("resolver.concurrency must be >= 1");
+        }
+
+        // Timeout
+        if self.resolver.timeout_ms == 0 {
+            anyhow::bail!("resolver.timeout_ms must be > 0");
+        }
+
+        // Cache size
+        if self.cache.size == 0 {
+            anyhow::bail!("cache.size must be > 0");
+        }
+
+        // Validate listen addresses
+        for addr in self
+            .listen
+            .iter()
+            .chain(self.listen_tls.iter())
+            .chain(self.listen_quic.iter())
+            .chain(self.listen_https.iter())
+        {
+            addr.parse::<std::net::SocketAddr>()
+                .with_context(|| format!("bad listen address '{addr}'"))?;
+        }
+
+        // API listen address
+        self.api
+            .listen
+            .parse::<std::net::SocketAddr>()
+            .with_context(|| format!("bad api.listen address '{}'", self.api.listen))?;
+
+        // Proxy protocol
+        match self.proxy.protocol.as_str() {
+            "v1" | "v2" => {}
+            other => {
+                anyhow::bail!("proxy.protocol must be v1|v2, got {other}");
+            }
+        }
+
+        // Log level
+        match self.log.level.as_str() {
+            "trace" | "debug" | "info" | "warn" | "error" => {}
+            other => {
+                anyhow::bail!("log.level must be trace|debug|info|warn|error, got {other}");
+            }
+        }
+
+        // Log format
+        match self.log.format.as_str() {
+            "json" | "text" => {}
+            other => {
+                anyhow::bail!("log.format must be json|text, got {other}");
+            }
+        }
+
+        // Zone kinds
+        for zone in &self.zones {
+            match zone.kind.as_str() {
+                "primary" | "secondary" | "stub" | "conditional" | "forwarder" => {}
+                other => {
+                    anyhow::bail!(
+                        "zone {}: kind must be primary|secondary|stub|conditional|forwarder, got {other}",
+                        zone.name
+                    );
+                }
+            }
+            if zone.kind == "primary" && zone.file.is_none() {
+                anyhow::bail!("zone {}: primary requires 'file'", zone.name);
+            }
+            if zone.kind == "secondary" && zone.primaries.is_empty() {
+                anyhow::bail!("zone {}: secondary requires 'primaries'", zone.name);
+            }
+        }
+
+        // Zones dir
+        if !self.zones_dir.starts_with('/') {
+            anyhow::bail!(
+                "zones_dir must be an absolute path, got '{}'",
+                self.zones_dir
+            );
+        }
+
         Ok(())
     }
 }
@@ -450,5 +580,130 @@ mod tests {
     fn toml_roundtrip() {
         let s = toml::to_string(&Config::default()).unwrap();
         let _: Config = toml::from_str(&s).unwrap();
+    }
+    #[test]
+    fn safe_defaults() {
+        let cfg = Config::default();
+        // API bound to localhost only
+        assert_eq!(cfg.api.listen, "127.0.0.1:5380");
+        // TOTP off by default (opt-in)
+        assert!(!cfg.auth.totp);
+        // TLS listeners empty by default (only when TLS configured)
+        assert!(cfg.listen_tls.is_empty());
+        // DNSSEC validation on by default
+        assert!(cfg.dnssec.validation);
+        // CNAME cloaking on by default
+        assert!(cfg.filter.cname_cloaking);
+        // Rebinding protection on by default
+        assert!(cfg.filter.rebinding);
+        // QNAME minimization on by default
+        assert!(cfg.resolver.qname_minimization);
+        // ECS off by default (privacy)
+        assert!(!cfg.resolver.ecs);
+        // Serve stale on by default
+        assert!(cfg.cache.serve_stale);
+    }
+    #[test]
+    fn validates_bad_listen_addr() {
+        let cfg = Config {
+            listen: vec!["not-an-addr".into()],
+            ..Default::default()
+        };
+        assert!(cfg.validate().is_err());
+    }
+    #[test]
+    fn validates_bad_api_listen() {
+        let mut cfg = Config::default();
+        cfg.api.listen = "999.999.999.999:5380".into();
+        assert!(cfg.validate().is_err());
+    }
+    #[test]
+    fn validates_bad_forward_protocol() {
+        let mut cfg = Config::default();
+        cfg.resolver.forward_protocol = "invalid".into();
+        assert!(cfg.validate().is_err());
+    }
+    #[test]
+    fn validates_zero_concurrency() {
+        let mut cfg = Config::default();
+        cfg.resolver.concurrency = 0;
+        assert!(cfg.validate().is_err());
+    }
+    #[test]
+    fn validates_zero_timeout() {
+        let mut cfg = Config::default();
+        cfg.resolver.timeout_ms = 0;
+        assert!(cfg.validate().is_err());
+    }
+    #[test]
+    fn validates_zero_cache_size() {
+        let mut cfg = Config::default();
+        cfg.cache.size = 0;
+        assert!(cfg.validate().is_err());
+    }
+    #[test]
+    fn validates_relative_zones_dir() {
+        let cfg = Config {
+            zones_dir: "relative/path".into(),
+            ..Default::default()
+        };
+        assert!(cfg.validate().is_err());
+    }
+    #[test]
+    fn validates_zone_primary_requires_file() {
+        let cfg = Config {
+            zones: vec![ZoneConfig {
+                name: "test.".into(),
+                kind: "primary".into(),
+                file: None,
+                primaries: vec![],
+            }],
+            ..Default::default()
+        };
+        assert!(cfg.validate().is_err());
+    }
+    #[test]
+    fn validates_zone_secondary_requires_primaries() {
+        let cfg = Config {
+            zones: vec![ZoneConfig {
+                name: "test.".into(),
+                kind: "secondary".into(),
+                file: None,
+                primaries: vec![],
+            }],
+            ..Default::default()
+        };
+        assert!(cfg.validate().is_err());
+    }
+    #[test]
+    fn validates_bad_zone_kind() {
+        let cfg = Config {
+            zones: vec![ZoneConfig {
+                name: "test.".into(),
+                kind: "invalid".into(),
+                file: None,
+                primaries: vec![],
+            }],
+            ..Default::default()
+        };
+        assert!(cfg.validate().is_err());
+    }
+    #[test]
+    fn validates_bad_log_level() {
+        let mut cfg = Config::default();
+        cfg.log.level = "invalid".into();
+        assert!(cfg.validate().is_err());
+    }
+    #[test]
+    fn validates_bad_log_format() {
+        let mut cfg = Config::default();
+        cfg.log.format = "xml".into();
+        assert!(cfg.validate().is_err());
+    }
+    #[test]
+    fn validates_bad_proxy_protocol() {
+        let mut cfg = Config::default();
+        cfg.proxy.protocol = "v3".into();
+        assert!(cfg.validate().is_err());
     }
 }
