@@ -32,6 +32,13 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 axum = { version = "0.8", features = ["json"] }
 async-trait = "0.1"
 
+[dev-dependencies]
+criterion = { version = "0.5", features = ["async_tokio"] }
+
+[[bench]]
+name = "cache_bench"
+harness = false
+
 [profile.release]
 opt-level = "z"
 lto = true

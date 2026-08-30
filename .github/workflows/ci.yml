@@ -47,6 +47,8 @@ jobs:
           sudo apt-get install -y libbotan-2-dev
       - name: Botan feature check
         run: cargo check --features botan-crypto
+      - name: Run Benchmarks
+        run: cargo bench
 
   deny:
     name: cargo-deny
