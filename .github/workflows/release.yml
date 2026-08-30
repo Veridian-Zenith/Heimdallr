@@ -14,15 +14,22 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    name: Build Binaries
+  ci:
+    name: CI Gate
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: Build & Release
+    needs: ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
+      - name: Install Rust stable
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
       - uses: Swatinem/rust-cache@v2
+
       - name: Build
         run: cargo build --release
 
@@ -32,16 +39,6 @@ jobs:
           name: heimdallr-linux
           path: target/release/heimdallr
 
-  publish:
-    name: Create Release
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: ./artifacts
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -51,9 +48,6 @@ jobs:
             ## Heimdallr ${{ github.ref_name }}
 
             A from-zero Rust DNS server (OSL-3.0), privacy & security focused.
-
-            ### Changes
-            * Auto-generated release for tag v${{ github.ref_name }}
 
             ### Binaries
             - Linux: `heimdallr-linux`

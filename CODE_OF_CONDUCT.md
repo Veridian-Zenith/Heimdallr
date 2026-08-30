@@ -1,7 +1,5 @@
 # Code of Conduct
 
-Applies to `Heimdallr` — same spirit as `Verdandi/CODE_OF_CONDUCT.md`, `Voix/CODE_OF_CONDUCT.md`.
-
 ## Expectation
 
 Be precise, be kind, review the code not the person. DNS is critical infrastructure; review rigor is care, not hostility.
@@ -16,8 +14,8 @@ Report via private security channel (`SECURITY.md`) or maintainer email `daedaev
 
 ## Scope
 
-Applies in repo, issues, PRs, and when representing `Heimdallr` elsewhere.
+Applies in repo, issues, PRs, and when representing Heimdallr elsewhere.
 
 ## Attribution
 
-Adapted from Contributor Covenant v2.1. Enforcement is by `Veridian Zenith` under `OSL-3.0` governance.
+Adapted from Contributor Covenant v2.1.

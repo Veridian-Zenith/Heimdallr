@@ -25,10 +25,12 @@ impl ZoneManager {
         }
     }
 
+    #[allow(dead_code)]
     pub fn catalog(&self) -> &Catalog {
         &self.catalog
     }
 
+    #[allow(dead_code)]
     pub fn into_catalog(self) -> Catalog {
         self.catalog
     }

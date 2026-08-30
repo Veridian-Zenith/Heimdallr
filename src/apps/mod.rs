@@ -1,6 +1,8 @@
 //! Apps — WASM-sandboxed `DnsApp` trait (`ROADMAP.md:M5-M9`).
 //! Replaces `DnsServer/Apps/*/` `C#` `dnsApp.config` per-app `csproj`; never `C#` direct.
 
+#![allow(dead_code)]
+
 pub trait DnsApp: Send + Sync {
     fn name(&self) -> &'static str;
     fn handle_query(&self, _qname: &str) -> Option<Vec<u8>> {

@@ -1,5 +1,7 @@
 //! PROXY protocol v1/v2 for UDP+TCP (`HAProxy` spec, Technitium parity `M4`).
 
+#![allow(dead_code)]
+
 use anyhow::Result;
 
 #[derive(Debug, Clone, Copy)]

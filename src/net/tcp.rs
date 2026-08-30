@@ -1,5 +1,7 @@
 //! TCP listener — length-prefixed framing `RFC 7766` §6.2, pipelined answers.
 
+#![allow(dead_code)]
+
 use anyhow::Result;
 use tracing::debug;
 

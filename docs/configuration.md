@@ -1,108 +1,97 @@
 # Configuration
 
-`heimdallr` reads `TOML` (like `Galdr/config/galdr.toml`) at `/etc/heimdallr/heimdallr.toml` by default. CLI `--config` overrides. Mirrors `Technitium DnsServer/DnsServerCore` settings (`WebServiceSettingsApi`) but flat `TOML`, not JSON API storage.
+Heimdallr reads TOML at `/etc/heimdallr/config.toml` by default. CLI `--config` overrides.
 
 ## Quick start
 
 ```bash
-sudo install -Dm644 config/heimdallr.toml /etc/heimdallr/heimdallr.toml
-heimdallr --config /etc/heimdallr/heimdallr.toml --listen 0.0.0.0:53 --api-listen 0.0.0.0:5380
-RUST_LOG=debug heimdallr  # tracing env-filter
+sudo install -Dm644 config/config.toml /etc/heimdallr/config.toml
+heimdallr --config /etc/heimdallr/config.toml
+RUST_LOG=debug heimdallr
 ```
 
-## Reference (`config/heimdallr.toml`)
+## Reference (`config/config.toml`)
 
 ```toml
-# Network (Technitium parity: listeners)
-listen = ["0.0.0.0:53", "[::]:53"]          # UDP+TCP together
-listen_tls = ["0.0.0.0:853"]               # DoT (rustls:ring) - ROADMAP.md:M4
-listen_quic = ["0.0.0.0:853"]              # DoQ (quinn:ring)
-listen_https = ["0.0.0.0:443"]             # DoH (axum+h2, /dns-query)
+# Network
+listen = ["0.0.0.0:53", "[::]:53"]
+listen_tls = ["0.0.0.0:853"]
+listen_quic = ["0.0.0.0:853"]
+listen_https = ["0.0.0.0:443"]
 
-# Recursive resolver (hickory-resolver)
+# Recursive resolver
 [resolver]
-forwarders = ["1.1.1.1:53", "8.8.8.8:53"]   # empty => pure recursion from root (named.root analogue)
-forward_protocol = "udp"                   # udp | tcp | dot | doh | doq
-qname_minimization = true                  # RFC 9156
-qname_randomization = false                # draft-vixie 0x20
-ecs = false                                # RFC 7871, forwarder only
-concurrency = 2                            # Technitium forwarder concurrency
+forwarders = ["1.1.1.1:53", "8.8.8.8:53"]
+forward_protocol = "udp"
+qname_minimization = true
+qname_randomization = false
+ecs = false
+concurrency = 2
 timeout_ms = 2000
 
 # Cache
 [cache]
 size = 50000
-serve_stale = true                         # stale-while-expire
-prefetch = 2                               # prefetch when TTL < N * query count
+serve_stale = true
+prefetch = 2
 persistent = "/var/lib/heimdallr/cache.bin"
 
-# Authoritative zones (repeatable)
+# Zones
 [[zones]]
 name = "example.test."
-kind = "primary"                           # primary | secondary | stub | conditional | forwarder
-file = "/var/lib/heimdallr/zones/example.test.zone"
-# secondary-specific:
-# primaries = ["10.0.0.1:53"]
-# transfer = "axfr"                        # axfr | ixfr
-# notify_retry = "5s"
+kind = "primary"
+file = "config/zones/live/example.test.zone"
 
 # DNSSEC
 [dnssec]
-validation = true                          # recursive/forwarder
-anchors = "/var/lib/heimdallr/root-anchors.xml" # like DnsServerCore/root-anchors.xml
-signing = false                            # hosted zones
-provider = "ring"                          # ring | botan  (botan needs --features botan-crypto)
+validation = true
+anchors = "/var/lib/heimdallr/root-anchors.xml"
+signing = false
+provider = "ring"
 
-# Filtering (AdvancedBlockingApp + DnsBlockListApp parity)
+# Filtering
 [filter]
-blocklists = [
-  "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
-]
+blocklists = ["https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"]
 allowlists = []
 regex_blocklist = ["^.*\\.ads\\..*$"]
 per_client = { "10.0.0.5/32" = { block = false } }
 cname_cloaking = true
-rebinding = true                           # DnsRebindingProtectionApp
+rebinding = true
 
-# Proxy (PROXY protocol v1/v2)
+# Proxy
 [proxy]
 enable = false
 allow = ["10.0.0.0/24"]
-protocol = "v2"                            # v1 | v2
+protocol = "v2"
 
-# API + Web console
+# API
 [api]
 listen = "0.0.0.0:5380"
-tls_cert = "/etc/heimdallr/cert.pem"       # optional, rustls:ring
-tls_key = "/etc/heimdallr/key.pem"
+tls_cert = ""
+tls_key = ""
 
 [auth]
-# RBAC + tokens (Technitium WebServiceAuthApi parity)
 users = [{ name = "admin", password_hash = "$argon2id$..." }]
-tokens = [{ name = "automation", value = "hmac-..." }]
-totp = true
+tokens = []
+totp = false
 oidc = false
 
 [log]
-level = "info"                             # trace|debug|info|warn
-query_log = "/var/log/heimdallr/query.log"
-format = "json"                            # json | text
+level = "info"
+query_log = ""
+format = "json"
 
 [dhcp]
 enable = false
-ranges = [{ subnet = "10.0.0.0/24", start = "10.0.0.100", end = "10.0.0.200", router = "10.0.0.1" }]
+ranges = []
 
 [cluster]
 enable = false
-peers = []                                 # ["10.0.0.2:5380"]
+peers = []
 ```
 
 ## File semantics
 
-- Missing keys use defaults from `src/core/config.rs`; `heimdallr --check-config` validates without binding ports.
-- Paths are created with `0700`/`0600` (like `Voix/FileUtils` `O_NOFOLLOW` lineage).
-- Zone files are standard `RFC 1035` with `$TTL`, `$ORIGIN`, includes.
-
-## API parity
-
-`docs/operation.md:API` maps this `TOML` to `Technitium/DnsServer/APIDOCS.md` `WebServiceJson` endpoints (`/api/settings/get`, `/api/zones/create`, etc.) for migration tooling.
+- Missing keys use defaults; `heimdallr --check-config` validates without binding ports.
+- Zone files are standard RFC 1035 with `$TTL`, `$ORIGIN`, includes.
+- SOA RNAME is auto-injected from `hostadmin` config field.

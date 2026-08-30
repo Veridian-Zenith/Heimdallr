@@ -1,5 +1,7 @@
 //! Filtering — `AdvancedBlockingApp` regex per-client, `DnsBlockListApp`, `CNAME` cloaking, rebinding.
 
+#![allow(dead_code)]
+
 #[derive(Default)]
 pub struct Filter {
     // TODO M6: blocklist URLs, regex set, per-client map, cname cloaking flag

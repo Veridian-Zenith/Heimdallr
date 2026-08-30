@@ -1,5 +1,7 @@
 //! DoT `RFC 7858` — `rustls:ring` (no OpenSSL/BoringSSL/libmsquic).
 
+#![allow(dead_code)]
+
 use anyhow::Result;
 use tracing::debug;
 

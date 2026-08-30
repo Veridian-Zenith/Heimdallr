@@ -2,6 +2,8 @@
 //!
 //! Fetches full zone from primary via TCP AXFR, loads into `InMemoryAuthority`.
 
+#![allow(dead_code)]
+
 use anyhow::Result;
 use tracing::info;
 

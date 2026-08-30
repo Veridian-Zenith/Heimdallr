@@ -334,6 +334,7 @@ impl Default for TlsConfig {
 
 impl TlsConfig {
     /// Resolve the TLS cert and key paths. Falls back to Let's Encrypt auto-detection.
+    #[allow(dead_code)]
     pub fn resolve_paths(
         &self,
         host: &str,
@@ -417,6 +418,7 @@ impl Config {
     }
 
     /// Resolved NS hostname for the zone (e.g. "ns1.example.test.").
+    #[allow(dead_code)]
     pub fn ns_name(&self, zone_name: &str) -> String {
         format!("ns1.{}", zone_name.trim_end_matches('.'))
     }

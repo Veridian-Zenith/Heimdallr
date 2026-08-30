@@ -1,5 +1,7 @@
 //! DoQ `RFC 9250` — `quinn:ring` pure Rust, no `libmsquic` (`README.md:7`).
 
+#![allow(dead_code)]
+
 use anyhow::Result;
 use tracing::debug;
 

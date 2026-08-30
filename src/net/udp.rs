@@ -1,5 +1,7 @@
 //! UDP listener — `tokio::net::UdpSocket` + 512-1232 buf, forwards to `Core` `hickory`.
 
+#![allow(dead_code)]
+
 use anyhow::{Context, Result};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::net::UdpSocket;

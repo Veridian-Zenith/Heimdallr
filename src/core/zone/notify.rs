@@ -1,5 +1,7 @@
 //! NOTIFY sender (`RFC 1996`) — informs secondaries of zone changes.
 
+#![allow(dead_code)]
+
 use anyhow::Result;
 use tracing::info;
 

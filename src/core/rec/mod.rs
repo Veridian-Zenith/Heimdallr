@@ -1,5 +1,7 @@
 //! Recursive behaviors — `QNAME` min `9156`, `0x20` randomization, `ECS` `7871`.
 
+#![allow(dead_code)]
+
 #[derive(Debug, Clone, Copy)]
 pub struct RecOptions {
     pub qname_minimization: bool,

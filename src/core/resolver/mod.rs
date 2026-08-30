@@ -1,6 +1,8 @@
 //! Resolver — `hickory-resolver` with forwarder list + concurrency (`M1` `M6`).
 //! Pure tokio; forwarding protocol pinned via Config::resolver.forward_protocol (not opportunistic).
 
+#![allow(dead_code)]
+
 use anyhow::{Context, Result};
 use hickory_proto::xfer::Protocol;
 use hickory_resolver::{
