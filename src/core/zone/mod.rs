@@ -8,8 +8,8 @@ pub mod secondary;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use hickory_server::authority::{AuthorityObject, Catalog, ZoneType};
 use hickory_server::proto::rr::{LowerName, Name};
+use hickory_server::zone_handler::{Catalog, ZoneHandler, ZoneType};
 use tracing::{error, info};
 
 use crate::config::{Config, ZoneConfig};
@@ -86,10 +86,8 @@ impl ZoneManager {
 
         let origin = LowerName::from(Name::from_ascii(&zone_name).context("invalid zone name")?);
 
-        self.catalog.upsert(
-            origin,
-            vec![Arc::new(authority) as Arc<dyn AuthorityObject>],
-        );
+        self.catalog
+            .upsert(origin, vec![Arc::new(authority) as Arc<dyn ZoneHandler>]);
 
         info!("zone {zone_name}: primary loaded from {file_path}");
         Ok(())

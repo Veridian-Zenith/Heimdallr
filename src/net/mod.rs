@@ -19,9 +19,9 @@ use crate::core::cache::{CacheConfig, SharedCache, new_shared_cache};
 use crate::core::resolver::ResolverWrap;
 use crate::core::resolver::forward::CacheForwardAuthority;
 use crate::core::zone::ZoneManager;
-use hickory_server::ServerFuture;
-use hickory_server::authority::{AuthorityObject, Catalog};
 use hickory_server::proto::rr::{LowerName, Name};
+use hickory_server::server::Server;
+use hickory_server::zone_handler::{Catalog, ZoneHandler};
 
 /// `Net` binds listeners for `ROADMAP.md:M1,M2,M4` — UDP + TCP (`7766`) + DoT (`7858`) + DoQ (`9250`) + DoH (`8484`).
 pub struct Net {
@@ -52,7 +52,7 @@ impl Net {
         let cache = new_shared_cache(cache_cfg);
 
         let catalog = self.build_catalog(cache)?;
-        let mut server = ServerFuture::new(catalog);
+        let mut server = Server::new(catalog);
 
         // Register UDP listeners
         for addr in &self.cfg.listen {
@@ -75,7 +75,7 @@ impl Net {
                 .await
                 .map_err(|e| anyhow::anyhow!("bind tcp {sock_addr}: {e}"))?;
             debug!("tcp listening on {sock_addr}");
-            server.register_listener(tcp_listener, Duration::from_secs(5));
+            server.register_listener(tcp_listener, Duration::from_secs(5), 4096);
         }
 
         // M4: TLS / QUIC / HTTPS listeners would be registered here
@@ -95,7 +95,7 @@ impl Net {
         let forwarder = self.build_cache_forwarder(cache)?;
         catalog.upsert(
             LowerName::from(Name::root()),
-            vec![Arc::new(forwarder) as Arc<dyn AuthorityObject>],
+            vec![Arc::new(forwarder) as Arc<dyn ZoneHandler>],
         );
 
         Ok(catalog)

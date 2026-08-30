@@ -27,18 +27,18 @@ pub async fn send_notify(zone_name: &str, secondary_addr: &str, serial: u32) -> 
         Name::from_ascii(zone_name).with_context(|| format!("invalid zone name '{zone_name}'"))?;
 
     // Build NOTIFY message
-    let mut msg = Message::new();
+    let mut msg = Message::query();
     // Generate a random 16-bit ID using system time entropy (no `rand` dependency)
     let id = (std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .subsec_nanos()
         & 0xFFFF) as u16;
-    msg.set_id(id);
-    msg.set_message_type(MessageType::Query);
-    msg.set_op_code(OpCode::Notify);
-    msg.set_authoritative(true);
-    msg.set_recursion_desired(false);
+    msg.metadata.id = id;
+    msg.metadata.message_type = MessageType::Query;
+    msg.metadata.op_code = OpCode::Notify;
+    msg.metadata.authoritative = true;
+    msg.metadata.recursion_desired = false;
 
     // Add SOA query for the zone (NOTIFY uses query section to identify the zone)
     let query = hickory_proto::op::Query::query(origin, RecordType::SOA);
@@ -65,21 +65,18 @@ pub async fn send_notify(zone_name: &str, secondary_addr: &str, serial: u32) -> 
 /// Parses the NOTIFY, extracts the zone name and serial, and returns
 /// `(zone_name, serial)` for the caller to decide whether to transfer.
 pub fn handle_notify(msg: &Message) -> Result<(String, u32)> {
-    let query = msg
-        .queries()
-        .first()
-        .context("NOTIFY has no query section")?;
+    let query = msg.queries.first().context("NOTIFY has no query section")?;
 
     let zone_name = query.name().to_utf8();
 
     // Extract serial from the answer section SOA if present
     let serial = msg
-        .answers()
+        .answers
         .iter()
         .find(|r| r.record_type() == RecordType::SOA)
         .and_then(|r| {
-            if let hickory_proto::rr::RData::SOA(soa) = r.data() {
-                Some(soa.serial())
+            if let hickory_proto::rr::RData::SOA(soa) = &r.data {
+                Some(soa.serial)
             } else {
                 None
             }
@@ -96,8 +93,8 @@ mod tests {
 
     #[test]
     fn handle_notify_extracts_zone_and_serial() {
-        let mut msg = Message::new();
-        msg.set_op_code(OpCode::Notify);
+        let mut msg = Message::query();
+        msg.metadata.op_code = OpCode::Notify;
 
         let origin = Name::from_ascii("example.test.").unwrap();
         let query = hickory_proto::op::Query::query(origin, RecordType::SOA);

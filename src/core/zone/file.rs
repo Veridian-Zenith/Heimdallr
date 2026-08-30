@@ -10,9 +10,9 @@
 //! `hostadmin` setting, ensuring consistency across all zones.
 
 use anyhow::{Result, bail};
-use hickory_server::authority::ZoneType;
 use hickory_server::proto::rr::{LowerName, Name, RData, Record, RecordType, RrKey};
-use hickory_server::store::file::{FileAuthority, FileConfig};
+use hickory_server::store::file::{FileConfig, FileZoneHandler};
+use hickory_server::zone_handler::{AxfrPolicy, ZoneType};
 use std::path::{Path, PathBuf};
 
 /// Load a zone file and return a `FileAuthority`.
@@ -25,7 +25,7 @@ pub fn load_zone_file(
     zones_dir: &str,
     zone_type: ZoneType,
     soa_rname_override: Option<&str>,
-) -> Result<FileAuthority> {
+) -> Result<FileZoneHandler> {
     let path = resolve_zone_path(file_path, zones_dir);
 
     if !path.exists() {
@@ -36,15 +36,15 @@ pub fn load_zone_file(
         Name::from_ascii(zone_name).map_err(|e| anyhow::anyhow!("invalid zone origin: {e}"))?;
 
     let config = FileConfig {
-        zone_file_path: path.clone(),
+        zone_path: path.clone(),
     };
 
     // __dnssec is enabled via dnssec-ring feature, so nx_proof_kind is required
-    let mut authority = FileAuthority::try_from_config(
+    let mut authority = FileZoneHandler::try_from_config(
         origin.clone(),
         zone_type,
-        true, // allow_axfr
-        None, // root_dir
+        AxfrPolicy::AllowAll, // allow_axfr
+        None,                 // root_dir
         &config,
         Some(hickory_server::dnssec::NxProofKind::Nsec),
     )
@@ -59,7 +59,7 @@ pub fn load_zone_file(
 }
 
 /// Replace the SOA record's RNAME (admin email) in the authority.
-fn patch_soa_rname(authority: &mut FileAuthority, origin: &Name, rname_str: &str) -> Result<()> {
+fn patch_soa_rname(authority: &mut FileZoneHandler, origin: &Name, rname_str: &str) -> Result<()> {
     let new_rname = Name::from_ascii(rname_str)
         .map_err(|e| anyhow::anyhow!("invalid SOA RNAME '{rname_str}': {e}"))?;
 
@@ -70,7 +70,7 @@ fn patch_soa_rname(authority: &mut FileAuthority, origin: &Name, rname_str: &str
         let records = authority.records_get_mut();
         records.get(&soa_key).and_then(|set| {
             set.records(false).next().and_then(|r| {
-                if let RData::SOA(soa) = r.data() {
+                if let RData::SOA(soa) = &r.data {
                     Some(soa.clone())
                 } else {
                     None
@@ -81,13 +81,13 @@ fn patch_soa_rname(authority: &mut FileAuthority, origin: &Name, rname_str: &str
 
     if let Some(soa) = old_soa {
         let new_soa = hickory_server::proto::rr::rdata::SOA::new(
-            soa.mname().clone(),
+            soa.mname.clone(),
             new_rname,
-            soa.serial(),
-            soa.refresh(),
-            soa.retry(),
-            soa.expire(),
-            soa.minimum(),
+            soa.serial,
+            soa.refresh,
+            soa.retry,
+            soa.expire,
+            soa.minimum,
         );
 
         // Remove old SOA, then upsert new one
@@ -188,10 +188,10 @@ mod tests {
         let soa_key = RrKey::new(LowerName::from(origin), RecordType::SOA);
         if let Some(soa_set) = records.get(&soa_key)
             && let Some(soa_record) = soa_set.records(false).next()
-            && let RData::SOA(soa) = soa_record.data()
+            && let RData::SOA(soa) = &soa_record.data
         {
             let expected = Name::from_ascii("admin.mynetwork.test.").unwrap();
-            let rname_str = soa.rname().to_utf8();
+            let rname_str = soa.rname.to_utf8();
             let expected_str = expected.to_utf8();
             assert_eq!(
                 rname_str.to_lowercase(),

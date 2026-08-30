@@ -9,8 +9,8 @@ use anyhow::{Context, Result};
 use hickory_proto::op::{Message, MessageType, OpCode, ResponseCode};
 use hickory_proto::rr::{Name, RData, Record, RecordType};
 use hickory_proto::serialize::binary::{BinDecodable, BinEncodable};
-use hickory_server::authority::ZoneType;
-use hickory_server::store::in_memory::InMemoryAuthority;
+use hickory_server::store::in_memory::InMemoryZoneHandler;
+use hickory_server::zone_handler::{AxfrPolicy, ZoneType};
 use std::net::SocketAddr;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -20,7 +20,7 @@ use tracing::{debug, error, info, warn};
 ///
 /// Sends a single AXFR query over TCP, receives all response messages,
 /// and assembles the complete zone.
-pub async fn axfr_from_primary(zone_name: &str, primary_addr: &str) -> Result<InMemoryAuthority> {
+pub async fn axfr_from_primary(zone_name: &str, primary_addr: &str) -> Result<InMemoryZoneHandler> {
     let sock_addr: SocketAddr = primary_addr
         .parse()
         .with_context(|| format!("bad primary addr '{primary_addr}'"))?;
@@ -35,16 +35,16 @@ pub async fn axfr_from_primary(zone_name: &str, primary_addr: &str) -> Result<In
         .with_context(|| format!("tcp connect to {primary_addr}"))?;
 
     // Build AXFR query
-    let mut query_msg = Message::new();
+    let mut query_msg = Message::query();
     let id = (std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .subsec_nanos()
         & 0xFFFF) as u16;
-    query_msg.set_id(id);
-    query_msg.set_message_type(MessageType::Query);
-    query_msg.set_op_code(OpCode::Query);
-    query_msg.set_recursion_desired(false);
+    query_msg.metadata.id = id;
+    query_msg.metadata.message_type = MessageType::Query;
+    query_msg.metadata.op_code = OpCode::Query;
+    query_msg.metadata.recursion_desired = false;
 
     let query = hickory_proto::op::Query::query(origin.clone(), RecordType::AXFR);
     query_msg.add_query(query);
@@ -91,26 +91,26 @@ pub async fn axfr_from_primary(zone_name: &str, primary_addr: &str) -> Result<In
 
         let response = Message::from_bytes(&msg_buf).context("parse AXFR response")?;
 
-        if response.response_code() != ResponseCode::NoError {
-            let rcode = response.response_code();
+        if response.metadata.response_code != ResponseCode::NoError {
+            let rcode = response.metadata.response_code;
             error!("axfr: primary returned {rcode:?} for zone {zone_name}");
             anyhow::bail!("AXFR failed: {rcode:?}");
         }
 
         // Extract records from answer section
-        for rr in response.answers() {
-            let rdata = rr.data().clone();
+        for rr in response.answers.iter() {
+            let rdata = rr.data.clone();
 
             // Detect SOA records for boundary detection
             if let RData::SOA(soa) = &rdata {
                 if !saw_soa_start {
                     // First SOA = start of zone
                     saw_soa_start = true;
-                    soa_serial = Some(soa.serial());
-                    debug!("axfr: SOA start serial={}", soa.serial());
+                    soa_serial = Some(soa.serial);
+                    debug!("axfr: SOA start serial={}", soa.serial);
                 } else {
                     // Second SOA = end of zone
-                    let serial = soa.serial();
+                    let serial = soa.serial;
                     debug!("axfr: SOA end serial={serial}");
                     if let Some(start_serial) = soa_serial
                         && serial != start_serial
@@ -126,7 +126,7 @@ pub async fn axfr_from_primary(zone_name: &str, primary_addr: &str) -> Result<In
         }
 
         // Check for truncation (more messages coming)
-        if !response.truncated() {
+        if !response.metadata.truncation {
             // Not truncated — but in AXFR, the second SOA signals end
             if saw_soa_start && records.iter().any(|r| r.record_type() == RecordType::SOA) {
                 break;
@@ -139,8 +139,8 @@ pub async fn axfr_from_primary(zone_name: &str, primary_addr: &str) -> Result<In
         records.len()
     );
 
-    // Build InMemoryAuthority from collected records
-    let authority = InMemoryAuthority::empty(origin, ZoneType::Primary, false, None);
+    // Build InMemoryZoneHandler from collected records
+    let authority = InMemoryZoneHandler::empty(origin, ZoneType::Primary, AxfrPolicy::Deny, None);
 
     for record in records {
         authority.upsert(record, 0).await;

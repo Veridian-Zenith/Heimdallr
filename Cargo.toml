@@ -14,9 +14,10 @@ botan-crypto = ["dep:botan"]
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-hickory-proto = { version = "0.25", features = ["dnssec-ring"] }
-hickory-resolver = "0.25"
-hickory-server = { version = "0.25", features = ["dnssec-ring", "resolver", "testing"] }
+hickory-proto = { version = "0.26.1", features = ["dnssec-ring"] }
+hickory-resolver = { version = "0.26.1", features = ["tokio"] }
+hickory-server = { version = "0.26.1", features = ["dnssec-ring", "resolver", "testing"] }
+hickory-net = "0.26.1"
 quinn = { version = "0.11", features = ["ring"], default-features = false }
 rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"] }
 # Pure-Rust crypto via ring (no OpenSSL/BoringSSL/aws-lc). Botan optional for future custom DNSSEC/HSM.

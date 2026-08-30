@@ -9,11 +9,10 @@
 pub mod forward;
 
 use anyhow::{Context, Result};
-use hickory_proto::xfer::Protocol;
+use hickory_net::runtime::TokioRuntimeProvider;
 use hickory_resolver::{
     Resolver as HickoryResolver,
     config::{NameServerConfig, ResolverConfig, ResolverOpts},
-    name_server::TokioConnectionProvider,
 };
 use std::{net::SocketAddr, path::Path, str::FromStr};
 use tracing::debug;
@@ -24,34 +23,27 @@ use crate::config::ResolverConfig as Cfg;
 const SYSTEMD_RESOLVED_STUB: &str = "127.0.0.53:53";
 
 pub struct ResolverWrap {
-    inner: HickoryResolver<TokioConnectionProvider>,
+    inner: HickoryResolver<TokioRuntimeProvider>,
 }
 
 impl ResolverWrap {
     pub fn from_config(cfg: &Cfg) -> Result<Self> {
-        let mut rc = ResolverConfig::new();
+        let mut rc = ResolverConfig::default();
         for f in &cfg.forwarders {
             let addr = SocketAddr::from_str(f).with_context(|| format!("bad forwarder {f}"))?;
-            let proto = match cfg.forward_protocol.as_str() {
-                "udp" => Protocol::Udp,
-                "tcp" => Protocol::Tcp,
+            let ns_config = match cfg.forward_protocol.as_str() {
+                "udp" => NameServerConfig::udp(addr.ip()),
+                "tcp" => NameServerConfig::tcp(addr.ip()),
                 "dot" | "doh" | "doq" => {
                     tracing::warn!(
                         "forward_protocol {} needs M4 tls/https/quic feature, falling back to udp for now",
                         cfg.forward_protocol
                     );
-                    Protocol::Udp
+                    NameServerConfig::udp(addr.ip())
                 }
-                _ => Protocol::Udp,
+                _ => NameServerConfig::udp(addr.ip()),
             };
-            rc.add_name_server(NameServerConfig {
-                socket_addr: addr,
-                protocol: proto,
-                tls_dns_name: None,
-                http_endpoint: None,
-                trust_negative_responses: false,
-                bind_addr: None,
-            });
+            rc.add_name_server(ns_config);
         }
 
         // M1: System-resolver bypass — detect systemd-resolved and add fallback.
@@ -60,14 +52,9 @@ impl ResolverWrap {
         // queries still resolve even if configured forwarders are unreachable.
         if let Some(sys_addr) = Self::detect_system_resolver() {
             let addr: SocketAddr = sys_addr.parse().expect("system resolver address is valid");
-            rc.add_name_server(NameServerConfig {
-                socket_addr: addr,
-                protocol: Protocol::Udp,
-                tls_dns_name: None,
-                http_endpoint: None,
-                trust_negative_responses: true,
-                bind_addr: None,
-            });
+            let mut ns_config = NameServerConfig::udp(addr.ip());
+            ns_config.trust_negative_responses = true;
+            rc.add_name_server(ns_config);
             debug!("system-resolver bypass: added {sys_addr} as fallback");
         }
 
@@ -75,11 +62,11 @@ impl ResolverWrap {
         opts.timeout = std::time::Duration::from_millis(cfg.timeout_ms);
         opts.attempts = cfg.concurrency as usize;
         opts.recursion_desired = true;
-        opts.edns0 = true;
 
-        let resolver = HickoryResolver::builder_with_config(rc, TokioConnectionProvider::default())
+        let resolver = HickoryResolver::builder_with_config(rc, TokioRuntimeProvider::default())
             .with_options(opts)
-            .build();
+            .build()
+            .context("build resolver")?;
 
         Ok(Self { inner: resolver })
     }
@@ -113,11 +100,11 @@ impl ResolverWrap {
         None
     }
 
-    pub fn inner(&self) -> &HickoryResolver<TokioConnectionProvider> {
+    pub fn inner(&self) -> &HickoryResolver<TokioRuntimeProvider> {
         &self.inner
     }
 
-    pub fn into_inner(self) -> HickoryResolver<TokioConnectionProvider> {
+    pub fn into_inner(self) -> HickoryResolver<TokioRuntimeProvider> {
         self.inner
     }
 }

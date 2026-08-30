@@ -82,15 +82,15 @@ async fn handle_query(
     use hickory_proto::serialize::binary::{BinDecodable, BinEncodable};
 
     let req = Message::from_bytes(&data).context("parse query")?;
-    let query = req.queries().first().cloned();
+    let query = req.queries.first().cloned();
     let (qname, qtype) = match query {
         Some(q) => (q.name().to_string(), q.query_type()),
         None => {
-            let mut resp = Message::new();
-            resp.set_id(req.id());
-            resp.set_message_type(MessageType::Response);
-            resp.set_op_code(OpCode::Query);
-            resp.set_response_code(ResponseCode::FormErr);
+            let mut resp = Message::query();
+            resp.metadata.id = req.metadata.id;
+            resp.metadata.message_type = MessageType::Response;
+            resp.metadata.op_code = OpCode::Query;
+            resp.metadata.response_code = ResponseCode::FormErr;
             let bytes = resp.to_bytes()?;
             sock.send_to(&bytes, peer).await?;
             return Ok(());
@@ -100,11 +100,11 @@ async fn handle_query(
     // Filter gate — M6 regex per-client (stub now checks exact qname)
     let client_ip = peer.ip();
     if filter.is_blocked(&qname, client_ip) {
-        let mut resp = Message::new();
-        resp.set_id(req.id());
-        resp.set_message_type(MessageType::Response);
-        resp.set_op_code(OpCode::Query);
-        resp.set_response_code(ResponseCode::NXDomain);
+        let mut resp = Message::query();
+        resp.metadata.id = req.metadata.id;
+        resp.metadata.message_type = MessageType::Response;
+        resp.metadata.op_code = OpCode::Query;
+        resp.metadata.response_code = ResponseCode::NXDomain;
         let bytes = resp.to_bytes()?;
         sock.send_to(&bytes, peer).await?;
         return Ok(());
@@ -113,11 +113,11 @@ async fn handle_query(
     // Forward via hickory-resolver (latency concurrency handled there)
     let name = qname.trim_end_matches('.').to_string();
     let lookup = resolver.inner().lookup(name.clone(), qtype).await;
-    let mut resp = Message::new();
-    resp.set_id(req.id());
-    resp.set_message_type(MessageType::Response);
-    resp.set_op_code(OpCode::Query);
-    resp.set_recursion_available(true);
+    let mut resp = Message::query();
+    resp.metadata.id = req.metadata.id;
+    resp.metadata.message_type = MessageType::Response;
+    resp.metadata.op_code = OpCode::Query;
+    resp.metadata.recursion_available = true;
     resp.add_query(hickory_proto::op::Query::query(
         hickory_proto::rr::Name::from_utf8(&name)
             .unwrap_or_else(|_| hickory_proto::rr::Name::root()),
@@ -126,13 +126,13 @@ async fn handle_query(
 
     match lookup {
         Ok(l) => {
-            for r in l.record_iter() {
+            for r in l.answers().iter() {
                 resp.add_answer(r.clone());
             }
         }
         Err(e) => {
             debug!("resolver miss {qname} {qtype:?}: {e}");
-            resp.set_response_code(ResponseCode::ServFail);
+            resp.metadata.response_code = ResponseCode::ServFail;
         }
     }
 
