@@ -1,8 +1,10 @@
+#[allow(dead_code)]
 pub mod cache;
 pub mod dnssec;
 pub mod filter;
 pub mod rec;
 pub mod resolver;
+#[allow(dead_code)]
 pub mod zone;
 
 use crate::config::Config;
