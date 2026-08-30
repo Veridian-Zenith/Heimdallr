@@ -96,9 +96,27 @@ impl ZoneManager {
     fn load_secondary_stub(&mut self, zone_cfg: &ZoneConfig) {
         let zone_name = &zone_cfg.name;
         let primaries = &zone_cfg.primaries;
-        info!(
-            "zone {zone_name}: secondary/stub registered (primaries={primaries:?}, AXFR will run at M2 connect)"
-        );
+        info!("zone {zone_name}: secondary/stub registered (primaries={primaries:?})");
+
+        // Spawn a background task to sync secondary zones
+        let zone_name_owned = zone_name.clone();
+        let primaries_owned = primaries.clone();
+        tokio::spawn(async move {
+            for primary in primaries_owned {
+                match crate::core::zone::secondary::axfr_from_primary(&zone_name_owned, &primary)
+                    .await
+                {
+                    Ok(_authority) => {
+                        info!("zone {zone_name_owned}: successfully synced from {primary}");
+                        // TODO: Register authority in the catalog here
+                        break;
+                    }
+                    Err(e) => {
+                        error!("zone {zone_name_owned}: failed to sync from {primary}: {e}");
+                    }
+                }
+            }
+        });
     }
 }
 
