@@ -3,7 +3,9 @@ name: Release
 on:
   push:
     tags:
-      - v*
+      - '*.*.*'
+      - '*.*.*a'
+      - '*.*.*b'
 
 env:
   CARGO_TERM_COLOR: always
@@ -27,13 +29,6 @@ jobs:
           name: heimdallr-linux
           path: target/release/heimdallr
 
-      - name: Upload binary (macOS)
-        if: runner.os == "macOS"
-        uses: actions/upload-artifact@v4
-        with:
-          name: heimdallr-macos
-          path: target/release/heimdallr
-
   publish:
     name: Create Release
     needs: build
@@ -49,17 +44,6 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: "Heimdallr ${{ github.ref_name }}"
-          body: |
-            ## Heimdallr v${{ github.ref_name }}
-
-            A from-zero Rust DNS server (OSL-3.0), privacy & security focused.
-
-            ### Changes
-            * Auto-generated release for tag v${{ github.ref_name }}
-
-            ### Binaries
-            - Linux: `heimdallr-linux`
-            - macOS: `heimdallr-macos` (if applicable)
-
+          path: ./artifacts
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, 'a') || contains(github.ref_name, 'b') }}
