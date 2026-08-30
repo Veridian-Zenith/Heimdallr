@@ -3,6 +3,8 @@
 
 #![allow(dead_code)]
 
+pub mod forward;
+
 use anyhow::{Context, Result};
 use hickory_proto::xfer::Protocol;
 use hickory_resolver::{
@@ -60,7 +62,10 @@ impl ResolverWrap {
     pub fn inner(&self) -> &HickoryResolver<TokioConnectionProvider> {
         &self.inner
     }
+
+    pub fn into_inner(self) -> HickoryResolver<TokioConnectionProvider> {
+        self.inner
+    }
 }
 
-// Keep old name alias for net modules
 pub type Resolver = ResolverWrap;

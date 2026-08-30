@@ -12,10 +12,13 @@ use std::time::Duration;
 use tracing::{debug, info};
 
 use crate::config::Config;
+use crate::core::cache::{CacheConfig, SharedCache, new_shared_cache};
+use crate::core::resolver::ResolverWrap;
+use crate::core::resolver::forward::CacheForwardAuthority;
 use crate::core::zone::ZoneManager;
 use hickory_server::ServerFuture;
 use hickory_server::authority::{AuthorityObject, Catalog};
-use hickory_server::store::forwarder::{ForwardAuthority, ForwardConfig};
+use hickory_server::proto::rr::{LowerName, Name};
 
 /// `Net` binds listeners for `ROADMAP.md:M1,M2,M4` — UDP + TCP (`7766`) + DoT (`7858`) + DoQ (`9250`) + DoH (`8484`).
 pub struct Net {
@@ -37,8 +40,15 @@ impl Net {
             self.cfg.proxy.enable
         );
 
-        // Build the catalog: authoritative zones + forwarder
-        let catalog = self.build_catalog()?;
+        // Build the catalog: authoritative zones + cache-aware forwarder
+        let cache_cfg = CacheConfig {
+            size: self.cfg.cache.size,
+            serve_stale: Duration::from_secs(30),
+            prefetch: self.cfg.cache.prefetch as u32,
+        };
+        let cache = new_shared_cache(cache_cfg);
+
+        let catalog = self.build_catalog(cache)?;
         let mut server = ServerFuture::new(catalog);
 
         // Register UDP listeners
@@ -72,47 +82,29 @@ impl Net {
         Ok(())
     }
 
-    /// Build a `Catalog` with authoritative zones from config + a catch-all forwarder.
-    fn build_catalog(&self) -> Result<Catalog> {
+    /// Build a `Catalog` with authoritative zones from config + a catch-all cache-aware forwarder.
+    fn build_catalog(&self, cache: SharedCache) -> Result<Catalog> {
         // Load authoritative zones
         let zone_manager = ZoneManager::new(self.cfg.clone());
         let mut catalog = zone_manager.load_all()?;
 
-        // Add catch-all forwarder for recursive resolution (everything not handled by zones)
-        let forwarder = self.build_forwarder()?;
+        // Add catch-all cache-aware forwarder for recursive resolution
+        let forwarder = self.build_cache_forwarder(cache)?;
         catalog.upsert(
-            hickory_server::proto::rr::LowerName::from(hickory_server::proto::rr::Name::root()),
+            LowerName::from(Name::root()),
             vec![Arc::new(forwarder) as Arc<dyn AuthorityObject>],
         );
 
         Ok(catalog)
     }
 
-    /// Build a `ForwardAuthority` for recursive resolution.
-    fn build_forwarder(&self) -> Result<ForwardAuthority> {
-        use hickory_server::proto::xfer::Protocol;
-        use hickory_server::resolver::config::{NameServerConfig, NameServerConfigGroup};
+    /// Build a `CacheForwardAuthority` — hickory-resolver + Heimdallr cache.
+    fn build_cache_forwarder(&self, cache: SharedCache) -> Result<CacheForwardAuthority> {
+        let resolver_wrap = ResolverWrap::from_config(&self.cfg.resolver)?;
+        let resolver = resolver_wrap.into_inner();
+        let origin = LowerName::from(Name::root());
 
-        let mut ns_configs = vec![];
-        for f in &self.cfg.resolver.forwarders {
-            let addr: SocketAddr = f
-                .parse()
-                .map_err(|e| anyhow::anyhow!("bad forwarder '{f}': {e}"))?;
-            let proto = match self.cfg.resolver.forward_protocol.as_str() {
-                "tcp" => Protocol::Tcp,
-                _ => Protocol::Udp,
-            };
-            ns_configs.push(NameServerConfig::new(addr, proto));
-        }
-        let name_servers = NameServerConfigGroup::from(ns_configs);
-
-        let forwarder = ForwardAuthority::builder_tokio(ForwardConfig {
-            name_servers,
-            options: None,
-        })
-        .build()
-        .map_err(|e| anyhow::anyhow!("build forwarder: {e}"))?;
-
-        Ok(forwarder)
+        info!("net: cache-aware forwarder configured (recursive resolution via hickory-resolver)");
+        Ok(CacheForwardAuthority::new(origin, resolver, cache))
     }
 }
