@@ -39,7 +39,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libbotan-2-dev
-- name: Botan feature check
+      - name: Botan feature check
         run: cargo check --features botan-crypto
 
   deny:
