@@ -183,20 +183,19 @@ mod tests {
 
         let origin = Name::from_ascii("example.test.").unwrap();
         let soa_key = RrKey::new(LowerName::from(origin), RecordType::SOA);
-        if let Some(soa_set) = records.get(&soa_key) {
-            if let Some(soa_record) = soa_set.records(false).next() {
-                if let RData::SOA(soa) = soa_record.data() {
-                    let expected = Name::from_ascii("admin.mynetwork.test.").unwrap();
-                    let rname_str = soa.rname().to_utf8();
-                    let expected_str = expected.to_utf8();
-                    assert_eq!(
-                        rname_str.to_lowercase(),
-                        expected_str.to_lowercase(),
-                        "SOA RNAME mismatch: got {rname_str}"
-                    );
-                    return;
-                }
-            }
+        if let Some(soa_set) = records.get(&soa_key)
+            && let Some(soa_record) = soa_set.records(false).next()
+            && let RData::SOA(soa) = soa_record.data()
+        {
+            let expected = Name::from_ascii("admin.mynetwork.test.").unwrap();
+            let rname_str = soa.rname().to_utf8();
+            let expected_str = expected.to_utf8();
+            assert_eq!(
+                rname_str.to_lowercase(),
+                expected_str.to_lowercase(),
+                "SOA RNAME mismatch: got {rname_str}"
+            );
+            return;
         }
         panic!("SOA record not found or wrong type");
     }
