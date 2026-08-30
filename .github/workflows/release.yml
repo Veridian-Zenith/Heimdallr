@@ -23,7 +23,7 @@ jobs:
       - name: Build
         run: cargo build --release
 
-      - name: Upload binary (Linux)
+      - name: Upload binary (Linux) artifact
         uses: actions/upload-artifact@v4
         with:
           name: heimdallr-linux
@@ -44,6 +44,16 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: "Heimdallr ${{ github.ref_name }}"
-          path: ./artifacts
+          body: |
+            ## Heimdallr ${{ github.ref_name }}
+
+            A from-zero Rust DNS server (OSL-3.0), privacy & security focused.
+
+            ### Changes
+            * Auto-generated release for tag v${{ github.ref_name }}
+
+            ### Binaries
+            - Linux: `heimdallr-linux`
+
           draft: false
           prerelease: ${{ contains(github.ref_name, 'a') || contains(github.ref_name, 'b') }}
