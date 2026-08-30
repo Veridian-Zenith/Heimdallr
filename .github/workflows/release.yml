@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - v*
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build Binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --release
+
+      - name: Upload binary (Linux)
+        uses: actions/upload-artifact@v4
+        with:
+          name: heimdallr-linux
+          path: target/release/heimdallr
+
+      - name: Upload binary (macOS)
+        if: runner.os == "macOS"
+        uses: actions/upload-artifact@v4
+        with:
+          name: heimdallr-macos
+          path: target/release/heimdallr
+
+  publish:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Heimdallr ${{ github.ref_name }}"
+          body: |
+            ## Heimdallr v${{ github.ref_name }}
+
+            A from-zero Rust DNS server (OSL-3.0), privacy & security focused.
+
+            ### Changes
+            * Auto-generated release for tag v${{ github.ref_name }}
+
+            ### Binaries
+            - Linux: `heimdallr-linux`
+            - macOS: `heimdallr-macos` (if applicable)
+
+          draft: false
+          prerelease: false
