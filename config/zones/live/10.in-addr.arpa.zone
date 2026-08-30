@@ -1,0 +1,20 @@
+$ORIGIN 10.in-addr.arpa.
+$TTL 3600
+
+@       IN  SOA ns1.example.test. admin.example.test. (
+            2026082901  ; serial
+            3600        ; refresh
+            900         ; retry
+            604800      ; expire
+            86400       ; minimum
+        )
+
+@       IN  NS  ns1.example.test.
+@       IN  NS  ns2.example.test.
+
+; PTR records
+1.0.0   IN  PTR ns1.example.test.
+2.0.0   IN  PTR ns2.example.test.
+10.0.0  IN  PTR www.example.test.
+25.0.0  IN  PTR mail.example.test.
+30.0.0  IN  PTR xmpp.example.test.

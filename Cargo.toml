@@ -1,6 +1,6 @@
 [package]
 name = "heimdallr"
-version = "0.1.0"
+version = "0.2.0-alpha"
 edition = "2024"
 license = "OSL-3.0"
 authors = ["Veridian Zenith"]
@@ -16,14 +16,13 @@ botan-crypto = ["dep:botan"]
 tokio = { version = "1", features = ["full"] }
 hickory-proto = { version = "0.25", features = ["dnssec-ring"] }
 hickory-resolver = "0.25"
-hickory-server = "0.25"
+hickory-server = { version = "0.25", features = ["dnssec-ring", "resolver", "testing"] }
 quinn = { version = "0.11", features = ["ring"], default-features = false }
 rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"] }
 # Pure-Rust crypto via ring (no OpenSSL/BoringSSL/aws-lc). Botan optional for future custom DNSSEC/HSM.
 botan = { version = "0.14", optional = true }
 futures = "0.3"
 anyhow = "1.0"
-thiserror = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 toml = "1.1.4"
 clap = { version = "4", features = ["derive"] }

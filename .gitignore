@@ -1,3 +1,6 @@
 /target
 # keep Cargo.lock for binary reproducibility (like Galdr)
-/target/
+AGENTS.md
+*.swp
+*.swo
+*~

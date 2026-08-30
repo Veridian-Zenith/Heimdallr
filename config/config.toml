@@ -1,0 +1,80 @@
+listen = ["127.0.0.1:5354"]
+listen_tls = []
+listen_quic = []
+listen_https = []
+
+# Server hostname — used for default NS records, Let's Encrypt cert auto-detection
+host = "ns1.example.test."
+
+# Zone admin email (SOA RNAME). Default: hostadmin@<host>.
+# Stored as user@domain, converted to DNS wire format (user.domain) automatically.
+# Uncomment and change as needed:
+# hostadmin = "admin@mynetwork.test"
+
+# Zone files directory (default: /etc/heimdallr/zones)
+zones_dir = "/etc/heimdallr/zones"
+
+# TLS — auto-detects Let's Encrypt certs from /etc/letsencrypt/live/<host>/
+# Override paths manually if needed:
+# [tls]
+# cert = "/path/to/fullchain.pem"
+# key = "/path/to/privkey.pem"
+# letsencrypt_dir = "/etc/letsencrypt/live"
+
+[resolver]
+forwarders = ["9.9.9.11:53"]
+forward_protocol = "udp"
+qname_minimization = true
+qname_randomization = false
+ecs = false
+concurrency = 2
+timeout_ms = 2000
+
+[cache]
+size = 50000
+serve_stale = true
+prefetch = 2
+
+[dnssec]
+validation = true
+signing = false
+provider = "ring"
+
+[filter]
+blocklists = []
+allowlists = []
+regex_blocklist = []
+cname_cloaking = true
+rebinding = true
+
+[proxy]
+enable = false
+allow = []
+protocol = "v2"
+
+[api]
+listen = "127.0.0.1:5381"
+
+[auth]
+totp = true
+oidc = false
+
+[log]
+level = "info"
+format = "json"
+
+[dhcp]
+enable = false
+
+[cluster]
+enable = false
+
+[[zones]]
+name = "example.test."
+kind = "primary"
+file = "example.test.zone"
+
+[[zones]]
+name = "10.in-addr.arpa."
+kind = "primary"
+file = "10.in-addr.arpa.zone"

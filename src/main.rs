@@ -1,5 +1,4 @@
-#![allow(dead_code)]
-#![allow(unused_imports)]
+#![forbid(unsafe_code)]
 
 mod api;
 mod apps;
@@ -85,8 +84,8 @@ async fn main() -> anyhow::Result<()> {
 fn load_config(args: &Args) -> anyhow::Result<config::Config> {
     let mut cfg = if let Some(path) = &args.config {
         config::Config::from_file(path)?
-    } else if std::path::Path::new("/etc/heimdallr/heimdallr.toml").exists() {
-        config::Config::from_file("/etc/heimdallr/heimdallr.toml")?
+    } else if std::path::Path::new("/etc/heimdallr/config.toml").exists() {
+        config::Config::from_file("/etc/heimdallr/config.toml")?
     } else {
         config::Config::default()
     };

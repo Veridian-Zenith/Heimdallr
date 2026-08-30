@@ -34,7 +34,7 @@ jobs:
       - name: Test
         run: cargo test
       - name: Check-config smoke
-        run: cargo run -- --check-config --config config/heimdallr.toml
+        run: cargo run -- --check-config --config config/config.toml
       - name: Install Botan dependencies
         run: |
           sudo apt-get update

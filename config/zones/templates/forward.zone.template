@@ -1,0 +1,31 @@
+; Heimdallr template — forward zone
+; Install to: /etc/heimdallr/zones/<your-zone>.zone
+; Edit SOA, NS, records for your domain.
+
+$ORIGIN {ZONE_NAME}
+$TTL 3600
+
+@       IN  SOA ns1.{ZONE_NAME} admin.{ZONE_NAME} (
+            2026082901  ; serial (YYYYMMDDNN)
+            3600        ; refresh (1h)
+            900         ; retry (15m)
+            604800      ; expire (1w)
+            86400       ; minimum (1d)
+        )
+
+; Nameservers — replace with your own
+@       IN  NS  ns1.{ZONE_NAME}.
+@       IN  NS  ns2.{ZONE_NAME}.
+
+; A records
+ns1     IN  A   10.0.0.1
+ns2     IN  A   10.0.0.2
+@       IN  A   10.0.0.10
+www     IN  A   10.0.0.10
+
+; AAAA (optional)
+;@      IN  AAAA    fd00::10
+;www    IN  AAAA    fd00::10
+
+; MX (optional)
+;@      IN  MX  10  mail.{ZONE_NAME}.

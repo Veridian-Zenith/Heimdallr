@@ -4,6 +4,13 @@ use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
+    /// Server hostname (used for SOA NS, default NS records). Defaults to first zone's ns1.
+    #[serde(default = "default_host")]
+    pub host: String,
+    /// Zone admin email (SOA RNAME). Default: hostadmin@<host>. Stored as `user@domain` —
+    /// converted to DNS wire format (`user.domain`) automatically when writing SOA.
+    #[serde(default)]
+    pub hostadmin: Option<String>,
     pub listen: Vec<String>,
     #[serde(default = "default_listen_tls")]
     pub listen_tls: Vec<String>,
@@ -11,6 +18,10 @@ pub struct Config {
     pub listen_quic: Vec<String>,
     #[serde(default)]
     pub listen_https: Vec<String>,
+    /// TLS certificate config. If omitted, auto-detected from Let's Encrypt
+    /// at `/etc/letsencrypt/live/<host>/` (cert.pem + privkey.pem).
+    #[serde(default)]
+    pub tls: TlsConfig,
     #[serde(default)]
     pub resolver: ResolverConfig,
     #[serde(default)]
@@ -33,6 +44,16 @@ pub struct Config {
     pub cluster: ClusterConfig,
     #[serde(default)]
     pub zones: Vec<ZoneConfig>,
+    #[serde(default = "default_zones_dir")]
+    pub zones_dir: String,
+}
+
+fn default_host() -> String {
+    "localhost".into()
+}
+
+fn default_zones_dir() -> String {
+    "/opt/heimdallr/zones".into()
 }
 
 fn default_listen_tls() -> Vec<String> {
@@ -280,9 +301,77 @@ pub struct ZoneConfig {
     pub primaries: Vec<String>,
 }
 
+/// TLS certificate configuration. Used by DoT, DoH, and DoQ listeners.
+///
+/// If both `cert` and `key` are omitted, auto-detected from Let's Encrypt at
+/// `/etc/letsencrypt/live/<host>/` (cert.pem + privkey.pem).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TlsConfig {
+    /// Explicit cert path. None = auto-detect from Let's Encrypt.
+    #[serde(default)]
+    pub cert: Option<String>,
+    /// Explicit key path. None = auto-detect from Let's Encrypt.
+    #[serde(default)]
+    pub key: Option<String>,
+    /// Let's Encrypt base dir. Defaults to `/etc/letsencrypt/live`.
+    #[serde(default = "default_letsencrypt_dir")]
+    pub letsencrypt_dir: String,
+}
+
+fn default_letsencrypt_dir() -> String {
+    "/etc/letsencrypt/live".into()
+}
+
+impl Default for TlsConfig {
+    fn default() -> Self {
+        Self {
+            cert: None,
+            key: None,
+            letsencrypt_dir: default_letsencrypt_dir(),
+        }
+    }
+}
+
+impl TlsConfig {
+    /// Resolve the TLS cert and key paths. Falls back to Let's Encrypt auto-detection.
+    pub fn resolve_paths(
+        &self,
+        host: &str,
+    ) -> anyhow::Result<(std::path::PathBuf, std::path::PathBuf)> {
+        let cert = if let Some(ref c) = self.cert {
+            std::path::PathBuf::from(c)
+        } else {
+            let host = host.trim_end_matches('.');
+            std::path::PathBuf::from(&self.letsencrypt_dir)
+                .join(host)
+                .join("fullchain.pem")
+        };
+
+        let key = if let Some(ref k) = self.key {
+            std::path::PathBuf::from(k)
+        } else {
+            let host = host.trim_end_matches('.');
+            std::path::PathBuf::from(&self.letsencrypt_dir)
+                .join(host)
+                .join("privkey.pem")
+        };
+
+        if !cert.exists() {
+            anyhow::bail!("TLS cert not found: {}", cert.display());
+        }
+        if !key.exists() {
+            anyhow::bail!("TLS key not found: {}", key.display());
+        }
+
+        Ok((cert, key))
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
+            host: default_host(),
+            hostadmin: None,
             listen: vec!["0.0.0.0:53".into(), "[::]:53".into()],
             listen_tls: default_listen_tls(),
             listen_quic: vec![],
@@ -298,6 +387,8 @@ impl Default for Config {
             dhcp: DhcpConfig::default(),
             cluster: ClusterConfig::default(),
             zones: vec![],
+            zones_dir: default_zones_dir(),
+            tls: TlsConfig::default(),
         }
     }
 }
@@ -309,6 +400,25 @@ impl Config {
         let cfg: Self = toml::from_str(&s).context("parse toml")?;
         cfg.validate()?;
         Ok(cfg)
+    }
+
+    /// Resolved admin email for SOA RNAME. Returns `hostadmin` if set, otherwise
+    /// `hostadmin@<host>`. The `@` is replaced with `.` for DNS wire format.
+    pub fn soa_rname(&self) -> String {
+        let email = self.hostadmin.as_deref().unwrap_or("hostadmin");
+        if email.contains('@') {
+            // "admin@example.test" -> "admin.example.test"
+            email.replace('@', ".")
+        } else {
+            // Bare name like "admin" — append @host
+            let host = self.host.trim_end_matches('.');
+            format!("{email}.{host}")
+        }
+    }
+
+    /// Resolved NS hostname for the zone (e.g. "ns1.example.test.").
+    pub fn ns_name(&self, zone_name: &str) -> String {
+        format!("ns1.{}", zone_name.trim_end_matches('.'))
     }
 
     pub fn validate(&self) -> Result<()> {
