@@ -35,7 +35,11 @@ jobs:
         run: cargo test
       - name: Check-config smoke
         run: cargo run -- --check-config --config config/heimdallr.toml
-      - name: Botan feature check
+      - name: Install Botan dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libbotan-2-dev
+- name: Botan feature check
         run: cargo check --features botan-crypto
 
   deny:
