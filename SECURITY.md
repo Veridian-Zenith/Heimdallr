@@ -4,9 +4,14 @@ Heimdallr is a DNS server. Bugs here are not just crashes — they are network a
 
 ## How to report
 
-Use GitHub's private security advisory (Security tab → Report a vulnerability) for `Veridian-Zenith/Heimdallr`. If you cannot, email `daedaevibin@ik.me` and ask for a private channel. Do not open a public issue for anything exploitable.
+Use GitHub's private security advisory (Security tab → Report a vulnerability) for `Veridian-Zenith/Heimdallr`. If you cannot, reach out via:
 
-Do not disclose externally until a fix is released.
+- **Email:** [daedaevibin@ik.me](mailto:daedaevibin@ik.me)
+- **Matrix:** [@daedaevibin:matrix.org](https://matrix.to/@daedaevibin:matrix.org#/@daedaevibin:matrix.org)
+- **Mastodon:** [@daedaevibin@defcon.social](https://defcon.social/@daedaevibin)
+- **Discord:** [Veridian Zenith](https://discord.gg/Vprc6XRkRg)
+
+Do not open a public issue for anything exploitable. Do not disclose externally until a fix is released.
 
 ## What to expect
 
