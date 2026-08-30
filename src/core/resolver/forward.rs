@@ -23,6 +23,30 @@ use tracing::{debug, warn};
 
 use crate::core::cache::{CacheKey, SharedCache};
 
+/// RFC 8914 Extended DNS Error codes we use.
+struct Ede;
+
+impl Ede {
+    /// 3 — Stale Answer: serving from stale cache.
+    const STALE_ANSWER: u16 = 3;
+    /// 13 — Cached Error: serving a cached error response.
+    const CACHED_ERROR: u16 = 13;
+
+    /// Encode an EDE info-option as bytes for `EdnsOption::Unknown(15, ...)`.
+    ///
+    /// Format (RFC 8914 §2):
+    /// ```text
+    /// INFO-CODE (2 bytes, network order)
+    /// EXTRA-TEXT (variable, UTF-8, may be empty)
+    /// ```
+    fn encode_info(code: u16, extra: &str) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(2 + extra.len());
+        buf.extend_from_slice(&code.to_be_bytes());
+        buf.extend_from_slice(extra.as_bytes());
+        buf
+    }
+}
+
 /// A forwarding authority that caches responses via Heimdallr's `SharedCache`.
 ///
 /// Lookup flow: cache check → upstream forward → cache store → return.
@@ -43,6 +67,81 @@ impl CacheForwardAuthority {
             resolver,
             cache,
         }
+    }
+
+    /// RFC 8482: Handle QTYPE=ANY by returning only A or AAAA.
+    ///
+    /// ANY queries enable reflection amplification. Per RFC 8482, servers
+    /// SHOULD return a subset of records. We return the first available
+    /// address record type (A then AAAA), preventing abuse while still
+    /// giving clients a useful answer.
+    async fn lookup_any(&self, name: &LowerName) -> LookupControlFlow<ForwardLookup> {
+        let qname = name.to_utf8();
+        debug!("RFC 8482:ANY mitigation for {qname}");
+
+        // Try A first, then AAAA — return whichever succeeds.
+        for rtype in [RecordType::A, RecordType::AAAA] {
+            let key = CacheKey {
+                qname: qname.clone(),
+                qtype: u16::from(rtype),
+            };
+
+            // Check cache first
+            {
+                let mut cache = self.cache.write().await;
+                if let Some((bytes, _stale, hits)) = cache.lookup(&key) {
+                    debug!("RFC 8482:ANY cache hit {qname} {rtype} (hits={hits})");
+                    if let Ok(msg) = Message::from_vec(&bytes) {
+                        let records: Vec<Record> = msg.answers().to_vec();
+                        if !records.is_empty() {
+                            let query = Query::query(Name::from(name.clone()), rtype);
+                            let lookup = hickory_resolver::lookup::Lookup::new_with_max_ttl(
+                                query,
+                                records.into(),
+                            );
+                            return LookupControlFlow::Continue(Ok(ForwardLookup(lookup)));
+                        }
+                    }
+                }
+            }
+
+            // Forward single-type query upstream
+            let mut fwd_name: Name = name.clone().into();
+            fwd_name.set_fqdn(false);
+            if let Ok(lookup) = self.resolver.lookup(fwd_name, rtype).await {
+                let records: Vec<Record> = lookup.record_iter().cloned().collect();
+                if !records.is_empty() {
+                    // Cache the result
+                    let mut msg = Message::new();
+                    msg.set_response_code(ResponseCode::NoError);
+                    for record in &records {
+                        msg.add_answer(record.clone());
+                    }
+                    if let Ok(bytes) = msg.to_vec() {
+                        let min_ttl = records
+                            .iter()
+                            .map(|r| std::time::Duration::from_secs(r.ttl() as u64))
+                            .min()
+                            .unwrap_or(std::time::Duration::from_secs(300));
+                        let cache_key = CacheKey {
+                            qname: qname.clone(),
+                            qtype: u16::from(rtype),
+                        };
+                        let mut cache = self.cache.write().await;
+                        cache.insert(cache_key, bytes, min_ttl);
+                    }
+                    let query = Query::query(Name::from(name.clone()), rtype);
+                    let lookup =
+                        hickory_resolver::lookup::Lookup::new_with_max_ttl(query, records.into());
+                    return LookupControlFlow::Continue(Ok(ForwardLookup(lookup)));
+                }
+            }
+        }
+
+        // Neither A nor AAAA available — return NXDOMAIN
+        LookupControlFlow::Continue(Err(LookupError::from(io::Error::other(
+            "RFC 8482: no address records for ANY query",
+        ))))
     }
 }
 
@@ -76,6 +175,12 @@ impl Authority for CacheForwardAuthority {
         rtype: RecordType,
         _lookup_options: LookupOptions,
     ) -> LookupControlFlow<Self::Lookup> {
+        // RFC 8482: ANY queries — return only A or AAAA, not the full set.
+        // This prevents reflection amplification and reduces response size.
+        if rtype == RecordType::ANY {
+            return self.lookup_any(name).await;
+        }
+
         let qname = name.to_utf8();
         let key = CacheKey {
             qname: qname.clone(),
@@ -178,5 +283,37 @@ impl Authority for CacheForwardAuthority {
 
     fn nx_proof_kind(&self) -> Option<&NxProofKind> {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn eden_encode_info_stale_answer() {
+        let buf = Ede::encode_info(Ede::STALE_ANSWER, "stale because upstream timeout");
+        assert_eq!(&buf[0..2], &3u16.to_be_bytes());
+        assert_eq!(
+            std::str::from_utf8(&buf[2..]).unwrap(),
+            "stale because upstream timeout"
+        );
+    }
+
+    #[test]
+    fn eden_encode_info_cached_error() {
+        let buf = Ede::encode_info(Ede::CACHED_ERROR, "");
+        assert_eq!(&buf[0..2], &13u16.to_be_bytes());
+        assert!(buf[2..].is_empty());
+    }
+
+    #[test]
+    fn eden_encode_info_roundtrip() {
+        let msg = "test extra text";
+        let buf = Ede::encode_info(42, msg);
+        let code = u16::from_be_bytes([buf[0], buf[1]]);
+        let extra = std::str::from_utf8(&buf[2..]).unwrap();
+        assert_eq!(code, 42);
+        assert_eq!(extra, msg);
     }
 }
