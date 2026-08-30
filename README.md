@@ -1,5 +1,8 @@
 # Heimdallr
 
+[![CI](https://github.com/Veridian-Zenith/Heimdallr/actions/workflows/ci.yml/badge.svg)](https://github.com/Veridian-Zenith/Heimdallr/actions/workflows/ci.yml)
+[![Release](https://github.com/Veridian-Zenith/Heimdallr/actions/workflows/release.yml/badge.svg)](https://github.com/Veridian-Zenith/Heimdallr/actions/workflows/release.yml)
+
 **Watcher at the Bifrost — privacy & security DNS server.**
 
 From-zero Rust DNS server built to replace Technitium DNS Server long-term. No code copied — wire format implemented from RFCs via `hickory-proto`/`hickory-server`.
