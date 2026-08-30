@@ -411,4 +411,116 @@ mod tests {
         assert_eq!(bytes, vec![2]);
         assert_eq!(cache.len(), 1);
     }
+
+    // ── Cache fuzz: rapid insert/lookup/evict cycles ──
+
+    /// Deterministic pseudo-random byte from a seed (xorshift32).
+    fn fuzz_byte(seed: &mut u32) -> u8 {
+        *seed ^= *seed << 13;
+        *seed ^= *seed >> 17;
+        *seed ^= *seed << 5;
+        *seed as u8
+    }
+
+    /// Fuzz: random insert/lookup/evict — no panics, no corruption.
+    #[test]
+    fn cache_fuzz_insert_lookup_evict() {
+        let mut cache = Cache::new(CacheConfig {
+            size: 64,
+            serve_stale: Duration::from_millis(50),
+            prefetch: 0,
+        });
+        let mut seed: u32 = 0xDEAD_BEEF;
+
+        for i in 0..2000 {
+            let key = CacheKey {
+                qname: format!("fuzz{}.example.com", fuzz_byte(&mut seed) as u16 % 100),
+                qtype: fuzz_byte(&mut seed) as u16,
+            };
+            let ttl_ms = 10 + (fuzz_byte(&mut seed) as u64 % 200);
+            let data: Vec<u8> = (0..fuzz_byte(&mut seed) as usize % 64)
+                .map(|_| fuzz_byte(&mut seed))
+                .collect();
+
+            // Interleave insert, lookup, reap, clear based on seed
+            let op = fuzz_byte(&mut seed) % 8;
+            match op {
+                0..=3 => {
+                    cache.insert(key, data, Duration::from_millis(ttl_ms));
+                }
+                4..=5 => {
+                    let _ = cache.lookup(&key);
+                }
+                6 => {
+                    cache.reap_expired();
+                }
+                7 => {
+                    if i % 500 == 0 {
+                        cache.clear();
+                    }
+                }
+                _ => {}
+            }
+
+            // Invariant: len <= size
+            assert!(
+                cache.len() <= 64,
+                "fuzz iteration {i}: cache.len()={} > 64",
+                cache.len()
+            );
+        }
+    }
+
+    /// Fuzz: concurrent-style insert/lookup with shared cache (single-threaded).
+    #[test]
+    fn cache_fuzz_rapid_hits() {
+        let mut cache = Cache::new(CacheConfig {
+            size: 32,
+            serve_stale: Duration::from_secs(1),
+            prefetch: 2,
+        });
+
+        // Insert one entry, then hit it 1000 times — no corruption
+        let key = CacheKey {
+            qname: "fuzz-target.example.com".into(),
+            qtype: 1,
+        };
+        cache.insert(key.clone(), vec![42; 256], Duration::from_secs(60));
+
+        for _ in 0..1000 {
+            let result = cache.lookup(&key);
+            assert!(result.is_some(), "entry disappeared during rapid hits");
+            let (_, _, hits) = result.unwrap();
+            assert!(hits > 0);
+        }
+
+        // should_prefetch should eventually trigger with enough hits
+        assert!(cache.should_prefetch(&key));
+    }
+
+    /// Fuzz: TTL edge cases — zero TTL, very large TTL, negative-ish values.
+    #[test]
+    fn cache_fuzz_ttl_edge_cases() {
+        let mut cache = Cache::new(test_config(10));
+        let key_zero = CacheKey {
+            qname: "zero-ttl.example.com".into(),
+            qtype: 1,
+        };
+        let key_max = CacheKey {
+            qname: "max-ttl.example.com".into(),
+            qtype: 1,
+        };
+
+        // Zero TTL — should be immediately expired
+        cache.insert(key_zero.clone(), vec![1], Duration::ZERO);
+        assert!(cache.is_expired(&key_zero));
+
+        // Very large TTL — should not expire
+        cache.insert(key_max.clone(), vec![2], Duration::from_secs(u64::MAX / 2));
+        assert!(!cache.is_expired(&key_max));
+
+        // Lookup on zero-TTL entry — should still return data (serve from cache)
+        let result = cache.lookup(&key_zero);
+        assert!(result.is_some());
+    }
 }

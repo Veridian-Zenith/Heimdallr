@@ -195,6 +195,43 @@ impl Authority for CacheForwardAuthority {
             let mut cache = self.cache.write().await;
             if let Some((bytes, _stale, hits)) = cache.lookup(&key) {
                 debug!("cache hit: {qname} {rtype} (hits={hits})");
+
+                // Prefetch: if TTL is low relative to hit count, spawn background
+                // re-fetch so the next client gets a fresh answer without waiting.
+                let do_prefetch = cache.should_prefetch(&key);
+                if do_prefetch {
+                    let cache = self.cache.clone();
+                    let resolver = self.resolver.clone();
+                    let name = name.clone();
+                    debug!("prefetch triggered: {qname} {rtype} (hits={hits})");
+                    tokio::spawn(async move {
+                        let mut fwd_name: Name = name.clone().into();
+                        fwd_name.set_fqdn(false);
+                        if let Ok(lookup) = resolver.lookup(fwd_name, rtype).await {
+                            let records: Vec<Record> = lookup.record_iter().cloned().collect();
+                            let mut msg = Message::new();
+                            msg.set_response_code(ResponseCode::NoError);
+                            for record in &records {
+                                msg.add_answer(record.clone());
+                            }
+                            if let Ok(bytes) = msg.to_vec() {
+                                let min_ttl = records
+                                    .iter()
+                                    .map(|r| std::time::Duration::from_secs(r.ttl() as u64))
+                                    .min()
+                                    .unwrap_or(std::time::Duration::from_secs(300));
+                                let key = CacheKey {
+                                    qname: name.to_utf8(),
+                                    qtype: u16::from(rtype),
+                                };
+                                let mut cache = cache.write().await;
+                                cache.insert(key, bytes, min_ttl);
+                                debug!("prefetch complete: {rtype} (ttl={}s)", min_ttl.as_secs());
+                            }
+                        }
+                    });
+                }
+
                 match Message::from_vec(&bytes) {
                     Ok(msg) => {
                         let records: Vec<Record> = msg.answers().to_vec();

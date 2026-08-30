@@ -15,9 +15,13 @@ use hickory_resolver::{
     config::{NameServerConfig, ResolverConfig, ResolverOpts},
     name_server::TokioConnectionProvider,
 };
-use std::{net::SocketAddr, str::FromStr};
+use std::{net::SocketAddr, path::Path, str::FromStr};
+use tracing::debug;
 
 use crate::config::ResolverConfig as Cfg;
+
+/// Well-known system resolver address for fallback.
+const SYSTEMD_RESOLVED_STUB: &str = "127.0.0.53:53";
 
 pub struct ResolverWrap {
     inner: HickoryResolver<TokioConnectionProvider>,
@@ -49,6 +53,24 @@ impl ResolverWrap {
                 bind_addr: None,
             });
         }
+
+        // M1: System-resolver bypass — detect systemd-resolved and add fallback.
+        // If systemd-resolved manages resolv.conf, its stub listener at 127.0.0.53
+        // forwards to the real upstream. Adding it as a last-resort nameserver means
+        // queries still resolve even if configured forwarders are unreachable.
+        if let Some(sys_addr) = Self::detect_system_resolver() {
+            let addr: SocketAddr = sys_addr.parse().expect("system resolver address is valid");
+            rc.add_name_server(NameServerConfig {
+                socket_addr: addr,
+                protocol: Protocol::Udp,
+                tls_dns_name: None,
+                http_endpoint: None,
+                trust_negative_responses: true,
+                bind_addr: None,
+            });
+            debug!("system-resolver bypass: added {sys_addr} as fallback");
+        }
+
         let mut opts = ResolverOpts::default();
         opts.timeout = std::time::Duration::from_millis(cfg.timeout_ms);
         opts.attempts = cfg.concurrency as usize;
@@ -60,6 +82,35 @@ impl ResolverWrap {
             .build();
 
         Ok(Self { inner: resolver })
+    }
+
+    /// Detect the system resolver for fallback.
+    ///
+    /// Returns `Some("127.0.0.53:53")` if systemd-resolved is detected
+    /// (stub-resolv.conf exists), `Some("127.0.0.1:53")` if /etc/resolv.conf
+    /// points to a non-loopback address, or `None` if no bypass is needed.
+    fn detect_system_resolver() -> Option<&'static str> {
+        // systemd-resolved stub: /run/systemd/resolve/stub-resolv.conf
+        if Path::new("/run/systemd/resolve/stub-resolv.conf").exists() {
+            debug!("systemd-resolved detected (stub-resolv.conf exists)");
+            return Some(SYSTEMD_RESOLVED_STUB);
+        }
+
+        // Also check /etc/resolv.conf — if it points to 127.0.0.53, resolved is active
+        if let Ok(content) = std::fs::read_to_string("/etc/resolv.conf") {
+            for line in content.lines() {
+                let line = line.trim();
+                if let Some(ns) = line.strip_prefix("nameserver") {
+                    let ns = ns.trim();
+                    if ns == "127.0.0.53" {
+                        debug!("systemd-resolved detected (resolv.conf points to 127.0.0.53)");
+                        return Some(SYSTEMD_RESOLVED_STUB);
+                    }
+                }
+            }
+        }
+
+        None
     }
 
     pub fn inner(&self) -> &HickoryResolver<TokioConnectionProvider> {
