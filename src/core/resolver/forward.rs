@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: OSL-3.0
+// Copyright (c) 2026 Veridian Zenith
+
 //! Cache-aware forwarding authority — the M1 recursive resolution path.
 //!
 //! Wraps `hickory-resolver` with Heimdallr's `Cache`. On each lookup:

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: OSL-3.0
+// Copyright (c) 2026 Veridian Zenith
+
 //! HTTP API `:5380` parity `Technitium/DnsServer/APIDOCS.md` + `DnsServerCore/WebService*.cs`.
 //! Axum router — `M6` logs+settings+zones, `M7` auth RBAC+TOTP+OIDC.
 

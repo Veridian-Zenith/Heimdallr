@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: OSL-3.0
+// Copyright (c) 2026 Veridian Zenith
+
 //! DoT `RFC 7858` — `rustls:ring` (no OpenSSL/BoringSSL/libmsquic).
 
 #![allow(dead_code)]

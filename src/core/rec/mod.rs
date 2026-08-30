@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: OSL-3.0
+// Copyright (c) 2026 Veridian Zenith
+
 //! Recursive behaviors — `QNAME` min `9156`, `0x20` randomization, `ECS` `7871`.
 
 #![allow(dead_code)]

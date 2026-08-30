@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: OSL-3.0
+// Copyright (c) 2026 Veridian Zenith
+
 //! UDP listener — `tokio::net::UdpSocket` + 512-1232 buf, forwards to `Core` `hickory`.
 
 #![allow(dead_code)]

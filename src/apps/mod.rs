@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: OSL-3.0
+// Copyright (c) 2026 Veridian Zenith
+
 //! Apps — WASM-sandboxed `DnsApp` trait (`ROADMAP.md:M5-M9`).
 //! Replaces `DnsServer/Apps/*/` `C#` `dnsApp.config` per-app `csproj`; never `C#` direct.
 

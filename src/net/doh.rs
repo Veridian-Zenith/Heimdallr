@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: OSL-3.0
+// Copyright (c) 2026 Veridian Zenith
+
 //! DoH `RFC 8484` — `axum` + `h2`, later `h3` via `quinn` (`M4`).
 
 #![allow(dead_code)]

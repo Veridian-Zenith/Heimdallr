@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: OSL-3.0
+// Copyright (c) 2026 Veridian Zenith
+
 //! Zone file loading via `hickory_server::store::file::FileAuthority`.
 //!
 //! Supports standard zone file format: `$ORIGIN`, `$TTL`, and all common record types

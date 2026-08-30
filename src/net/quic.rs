@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: OSL-3.0
+// Copyright (c) 2026 Veridian Zenith
+
 //! DoQ `RFC 9250` — `quinn:ring` pure Rust, no `libmsquic` (`README.md:7`).
 
 #![allow(dead_code)]

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: OSL-3.0
+// Copyright (c) 2026 Veridian Zenith
+
 //! Cluster control plane (`ROADMAP.md:M8`) — `DnsServerCore/Cluster/` parity.
 
 use anyhow::Result;

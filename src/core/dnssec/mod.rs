@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: OSL-3.0
+// Copyright (c) 2026 Veridian Zenith
+
 //! DNSSEC validation/signing — `ring` default, `botan` optional.
 //! `hickory-proto:dnssec-ring` covers `RSA`/`ECDSA`/`EdDSA` + `NSEC`/`NSEC3`; `botan-crypto` alt for HSM/agility.
 

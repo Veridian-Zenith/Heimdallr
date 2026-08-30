@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: OSL-3.0
+// Copyright (c) 2026 Veridian Zenith
+
 //! NOTIFY sender (`RFC 1996`) — informs secondaries of zone changes.
 //!
 //! After a primary increments its SOA serial, it sends a NOTIFY to each

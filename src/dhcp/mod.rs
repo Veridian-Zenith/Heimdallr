@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: OSL-3.0
+// Copyright (c) 2026 Veridian Zenith
+
 //! DHCPv4/v6 multi-scope (`ROADMAP.md:M8`) — `DnsServerCore/Dhcp/` parity.
 
 use anyhow::Result;

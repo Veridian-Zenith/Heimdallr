@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: OSL-3.0
+// Copyright (c) 2026 Veridian Zenith
+
 //! Resolver — `hickory-resolver` with forwarder list + concurrency (`M1` `M6`).
 //! Pure tokio; forwarding protocol pinned via Config::resolver.forward_protocol (not opportunistic).
 

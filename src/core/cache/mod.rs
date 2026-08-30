@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: OSL-3.0
+// Copyright (c) 2026 Veridian Zenith
+
 //! LRU + TTL cache with serve-stale and prefetch hint.
 //!
 //! M1: In-memory response cache for recursive resolution.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: OSL-3.0
+// Copyright (c) 2026 Veridian Zenith
+
 //! TCP listener — length-prefixed framing `RFC 7766` §6.2, pipelined answers.
 
 #![allow(dead_code)]

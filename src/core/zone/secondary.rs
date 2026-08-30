@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: OSL-3.0
+// Copyright (c) 2026 Veridian Zenith
+
 //! AXFR client for secondary zones (`RFC 1995`).
 //!
 //! Fetches full zone from primary via TCP AXFR, loads into `InMemoryAuthority`.
