@@ -14,7 +14,7 @@ botan-crypto = ["dep:botan"]
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-hickory-proto = { version = "0.25", features = ["dnssec-ring"] }
+hickory-proto = { version = "0.26", features = ["dnssec-ring"] }
 hickory-resolver = "0.25"
 hickory-server = "0.25"
 quinn = { version = "0.11", features = ["ring"], default-features = false }
