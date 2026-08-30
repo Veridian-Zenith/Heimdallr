@@ -17,6 +17,9 @@ cargo audit
 
 ## systemd
 
+> [!IMPORTANT]
+> These commands disable `systemd-resolved`. Make sure no other service depends on it before proceeding.
+
 ```bash
 sudo install -Dm755 target/release/heimdallr /usr/local/bin/heimdallr
 sudo install -Dm644 config/config.toml /etc/heimdallr/config.toml

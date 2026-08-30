@@ -44,4 +44,4 @@ Do not open a public issue for anything exploitable. Do not disclose externally 
 
 ## Disclosure
 
-Once fixed, advisories are published under `GHSA` and `SECURITY.md` is updated with affected versions. `OSL-3.0` requires patched source disclosure for any hosted deployment.
+Once fixed, advisories are published under `GHSA` and [SECURITY.md](SECURITY.md) is updated with affected versions. `OSL-3.0` requires patched source disclosure for any hosted deployment.

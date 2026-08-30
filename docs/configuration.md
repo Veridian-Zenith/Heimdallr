@@ -10,7 +10,13 @@ heimdallr --config /etc/heimdallr/config.toml
 RUST_LOG=debug heimdallr
 ```
 
+> [!NOTE]
+> Missing keys use defaults. Run `heimdallr --check-config` to validate without binding ports.
+
 ## Reference (`config/config.toml`)
+
+<details>
+<summary>Full reference (config/config.toml)</summary>
 
 ```toml
 # Network
@@ -89,6 +95,8 @@ ranges = []
 enable = false
 peers = []
 ```
+
+</details>
 
 ## File semantics
 

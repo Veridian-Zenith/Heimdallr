@@ -4,9 +4,9 @@ Rules are short — Heimdallr is DNS, not a web toy.
 
 ## Before code
 
-- Open an issue for anything larger than a typo. State intent and affected `ROADMAP.md` milestone.
+- Open an issue for anything larger than a typo. State intent and affected [ROADMAP.md](ROADMAP.md) milestone.
 - One idea per PR.
-- Read `docs/architecture.md`.
+- Read [docs/architecture.md](docs/architecture.md).
 
 ## Must pass before opening PR
 
@@ -32,9 +32,9 @@ If you touch boot/service behavior, paste `systemctl status heimdallr` and `jour
 ## Reporting
 
 - Bugs with repro: issue → exact `cargo`/`dig`/`kdig` commands + `RUST_LOG=debug` output.
-- Security: `SECURITY.md` private channel — never issues.
+- Security: [SECURITY.md](SECURITY.md) private channel — never issues.
 - Contact: [daedaevibin@ik.me](mailto:daedaevibin@ik.me) | [@daedaevibin:matrix.org](https://matrix.to/@daedaevibin:matrix.org#/@daedaevibin:matrix.org) | [Discord](https://discord.gg/Vprc6XRkRg) (email me when you join so I see it)
 
 ## Licensing
 
-By contributing you agree your work is under `OSL-3.0` (`LICENSE`).
+By contributing you agree your work is under `OSL-3.0` ([LICENSE](LICENSE)).

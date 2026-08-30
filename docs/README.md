@@ -1,4 +1,4 @@
-# Docs Index
+# Heimdallr Docs
 
 | Doc | Purpose |
 |---|---|

@@ -67,5 +67,5 @@ Append-only, newest last. Format: `YYYY-MM-DD — decision — reason`.
 
 - 2026-08-29 — Pure Rust QUIC/TLS via `quinn`+`rustls` (`ring`), not `libmsquic` — removes native dep, keeps `cargo tree` `openssl`-free.
 - 2026-08-29 — Botan as optional feature, not default — `ring` covers ~95% DNSSEC/TLS, `Botan` reserved for HSM/agility.
-- 2026-08-29 — `hickory-* 0.25` baseline — most RFC parity, `ring` backend matches `TechnitiumLibrary.Security`.
+- 2026-08-29 — `hickory-* 0.25` baseline — most RFC parity, `ring` backend.
 - 2026-08-29 — No `AGENTS.md` — use `CONTRIBUTING.md`+`docs/architecture.md` as handbook.

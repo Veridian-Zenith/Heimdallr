@@ -11,7 +11,7 @@ Pure `ring` + `quinn`/`rustls` for DoQ/DoH — no `libmsquic`, no `OpenSSL`/`Bor
 
 ## Status
 
-`0.2.0-alpha` — M0 scaffold + M1 partial. See `ROADMAP.md` for the parity ladder.
+`0.2.0-alpha` — M0 scaffold + M1 partial. See [ROADMAP.md](ROADMAP.md) for the parity ladder.
 
 ## Quick start
 
@@ -22,22 +22,8 @@ cargo build --release  # -> target/release/heimdallr
 
 ## Docs
 
-| Doc | Purpose |
-|---|---|
-| `ROADMAP.md` | M0–M9 parity ladder |
-| `SECURITY.md` | Advisory policy |
-| `CONTRIBUTING.md` | CI gates (fmt/clippy/audit/deny + OpenSSL ban) |
-| `docs/architecture.md` | net→core→api, crypto decision |
-| `docs/rfcs.md` | RFC coverage |
-| `docs/configuration.md` | config.toml reference |
-| `docs/operation.md` | systemd install |
-| `docs/threat-model.md` | TCB framing |
-| `docs/testing.md` | Unit/fuzz/integration gates |
-| `docs/comparison.md` | vs Technitium |
-| `docs/branding.md` | Naming and marks |
-| `docs/license.md` | OSL-3.0 |
-| `docs/lessons-from-technitium.md` | Design decisions from Technitium experience |
+See [docs/README.md](docs/README.md) for the full docs index.
 
 ## License
 
-`OSL-3.0` — see `LICENSE`. Network use counts as distribution; source must be offered. `Copyright (c) 2026 Veridian Zenith`.
+`OSL-3.0` — see [LICENSE](LICENSE). Network use counts as distribution; source must be offered. `Copyright (c) 2026 Veridian Zenith`.
