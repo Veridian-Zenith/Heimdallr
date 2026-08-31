@@ -508,7 +508,7 @@ Heimdallr is a DNS server — every UDP packet is untrusted, every TCP/TLS/QUIC 
 
 | Metric | Value | Test |
 |--------|-------|------|
-| Cache lookup (hit) | ~112 ns | criterion, 100 measurements |
+| Cache lookup (hit) | <105 ns | criterion, 100 measurements |
 
 > Benchmarks in `benches/cache_bench.rs`. Target: >60k qps cached on i7-8700 class (M9).
 

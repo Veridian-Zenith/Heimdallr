@@ -35,16 +35,26 @@ struct Args {
     /// Web console / API listen — overrides config if set
     #[arg(long)]
     api_listen: Option<String>,
+
+    /// Log level override (trace|debug|info|warn|error) — overrides config
+    #[arg(short, long)]
+    log_level: Option<String>,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
-
     let args = Args::parse();
     let cfg = load_config(&args)?;
+
+    // Initialize tracing with config log level. RUST_LOG overrides if set.
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(&cfg.log.level));
+
+    tracing_subscriber::fmt()
+        .with_env_filter(env_filter)
+        .with_target(true)
+        .with_thread_ids(false)
+        .init();
 
     if args.check_config {
         println!(

@@ -168,7 +168,19 @@ impl Net {
         }
 
         info!("net: all listeners registered, serving");
+
+        // Graceful shutdown on ctrl+C — cancel hickory-server's internal tasks.
+        let shutdown_token = server.shutdown_token().clone();
+        tokio::spawn(async move {
+            tokio::signal::ctrl_c()
+                .await
+                .expect("failed to install ctrl+C handler");
+            info!("net: ctrl+C received, shutting down");
+            shutdown_token.cancel();
+        });
+
         server.block_until_done().await?;
+        info!("net: all listeners stopped");
         Ok(())
     }
 
