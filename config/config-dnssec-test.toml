@@ -1,0 +1,39 @@
+# DNSSEC validation test config — signs example.test with ECDSA P-256
+listen = ["127.0.0.1:5355"]
+host = "ns1.example.test."
+zones_dir = "/tmp/heimdallr-dnssec-test/zones"
+
+[resolver]
+forwarders = ["9.9.9.11:53"]
+forward_protocol = "udp"
+qname_minimization = true
+concurrency = 2
+timeout_ms = 2000
+
+[cache]
+size = 1000
+serve_stale = false
+
+[dnssec]
+validation = false  # don't validate upstream (no internet needed for test)
+signing = true
+provider = "ring"
+
+[api]
+listen = "127.0.0.1:5382"
+
+[log]
+level = "debug"
+format = "text"
+
+[[zones]]
+name = "example.test."
+kind = "primary"
+file = "example.test.zone"
+dnssec_signing = true
+dnssec_algorithm = "ecdsa-p256"
+
+# NSEC3 configuration example
+# [zones.nx_proof]
+# kind = "nsec3"
+# iterations = 0

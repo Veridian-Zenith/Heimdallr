@@ -26,6 +26,25 @@ pub fn load_zone_file(
     zone_type: ZoneType,
     soa_rname_override: Option<&str>,
 ) -> Result<FileZoneHandler> {
+    load_zone_file_with_proof(
+        file_path,
+        zone_name,
+        zones_dir,
+        zone_type,
+        soa_rname_override,
+        Some(hickory_server::dnssec::NxProofKind::Nsec),
+    )
+}
+
+/// Load a zone file with explicit NSEC/NSEC3 proof kind.
+pub fn load_zone_file_with_proof(
+    file_path: &str,
+    zone_name: &str,
+    zones_dir: &str,
+    zone_type: ZoneType,
+    soa_rname_override: Option<&str>,
+    nx_proof_kind: Option<hickory_server::dnssec::NxProofKind>,
+) -> Result<FileZoneHandler> {
     let path = resolve_zone_path(file_path, zones_dir);
 
     if !path.exists() {
@@ -39,14 +58,13 @@ pub fn load_zone_file(
         zone_path: path.clone(),
     };
 
-    // __dnssec is enabled via dnssec-ring feature, so nx_proof_kind is required
     let mut authority = FileZoneHandler::try_from_config(
         origin.clone(),
         zone_type,
         AxfrPolicy::AllowAll, // allow_axfr
         None,                 // root_dir
         &config,
-        Some(hickory_server::dnssec::NxProofKind::Nsec),
+        nx_proof_kind,
     )
     .map_err(|e| anyhow::anyhow!("failed to parse zone file {}: {e}", path.display()))?;
 

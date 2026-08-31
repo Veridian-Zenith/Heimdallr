@@ -355,6 +355,65 @@ pub struct ZoneConfig {
     /// Path to DNSSEC signing key (PEM/DER). If omitted, auto-generate and store in keys_dir.
     #[serde(default)]
     pub dnssec_key: Option<String>,
+    /// NSEC/NSEC3 proof kind for DNSSEC signing. "nsec" (default) or "nsec3" with params.
+    #[serde(default)]
+    pub nx_proof: Option<NxProofConfig>,
+}
+
+/// NSEC3 configuration for DNSSEC non-existence proofs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NxProofConfig {
+    /// Proof kind: "nsec" or "nsec3".
+    #[serde(default = "default_nx_proof_kind")]
+    pub kind: String,
+    /// NSEC3 hash algorithm (default: SHA1).
+    #[serde(default)]
+    pub algorithm: Option<String>,
+    /// NSEC3 salt (hex-encoded).
+    #[serde(default)]
+    pub salt: Option<String>,
+    /// NSEC3 iterations (default: 0).
+    #[serde(default)]
+    pub iterations: Option<u16>,
+    /// NSEC3 opt-out flag (default: false).
+    #[serde(default)]
+    pub opt_out: Option<bool>,
+}
+
+fn default_nx_proof_kind() -> String {
+    "nsec".into()
+}
+
+impl ZoneConfig {
+    /// Convert nx_proof config to hickory's NxProofKind.
+    pub fn nx_proof_kind(&self) -> Option<hickory_server::dnssec::NxProofKind> {
+        match self.nx_proof.as_ref().map(|c| c.kind.as_str()) {
+            Some("nsec") | None => Some(hickory_server::dnssec::NxProofKind::Nsec),
+            Some("nsec3") => {
+                let cfg = self.nx_proof.as_ref().unwrap();
+                // Nsec3HashAlgorithm currently only supports SHA1
+                let algorithm = hickory_server::proto::dnssec::Nsec3HashAlgorithm::SHA1;
+                let salt = cfg
+                    .salt
+                    .as_deref()
+                    .and_then(|s| hex::decode(s).ok())
+                    .map(|b| std::sync::Arc::from(b.as_slice()))
+                    .unwrap_or_default();
+                let iterations = cfg.iterations.unwrap_or(0);
+                let opt_out = cfg.opt_out.unwrap_or(false);
+                Some(hickory_server::dnssec::NxProofKind::Nsec3 {
+                    algorithm,
+                    salt,
+                    iterations,
+                    opt_out,
+                })
+            }
+            Some(other) => {
+                tracing::warn!("unknown nx_proof kind '{other}', defaulting to NSEC");
+                Some(hickory_server::dnssec::NxProofKind::Nsec)
+            }
+        }
+    }
 }
 
 fn default_dnssec_algorithm() -> String {

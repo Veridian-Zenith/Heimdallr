@@ -4,6 +4,7 @@
 pub mod catalog;
 pub mod file;
 pub mod notify;
+pub mod record;
 pub mod secondary;
 
 use std::sync::Arc;
@@ -78,12 +79,14 @@ impl ZoneManager {
             .with_context(|| format!("zone {zone_name}: primary requires 'file'"))?;
 
         let soa_rname = self.cfg.soa_rname();
-        let authority = file::load_zone_file(
+        let nx_proof_kind = zone_cfg.nx_proof_kind();
+        let authority = file::load_zone_file_with_proof(
             file_path,
             &zone_name,
             zones_dir,
             ZoneType::Primary,
             Some(&soa_rname),
+            nx_proof_kind,
         )
         .with_context(|| format!("zone {zone_name}: load failed"))?;
 
