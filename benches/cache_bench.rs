@@ -3,8 +3,9 @@
 
 //! Performance benchmarks for Heimdallr Cache and Resolver.
 
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use std::collections::HashMap;
+use std::hint::black_box;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
