@@ -5,13 +5,25 @@ Heimdallr reads TOML at `/etc/heimdallr/config.toml` by default. CLI `--config` 
 ## Quick start
 
 ```bash
-sudo install -Dm644 config/config.toml /etc/heimdallr/config.toml
-heimdallr --config /etc/heimdallr/config.toml
+sudo ./scripts/install.sh
+heimdallr --check-config
 RUST_LOG=debug heimdallr
 ```
 
 > [!NOTE]
 > Missing keys use defaults. Run `heimdallr --check-config` to validate without binding ports.
+
+## API Endpoints
+
+| Endpoint | Description |
+|---|---|
+| `GET /api/health` | Health check (`{"status":"ok","version":"..."}`) |
+| `GET /api/info` | Server info (hostname, listen addrs, zones count, DNSSEC, cache, log level) |
+| `GET /api/zones` | List all configured zones (name, kind, file, primaries) |
+| `GET /api/zones/{name}` | Detail for a single zone |
+
+> [!NOTE]
+> API TLS support (`api.tls_cert`/`api.tls_key`) is planned for M4. Currently serves plain HTTP.
 
 ## Reference (`config/config.toml`)
 

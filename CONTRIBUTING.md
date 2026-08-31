@@ -15,7 +15,7 @@ cargo fmt --check
 cargo clippy -- -D warnings
 cargo check
 cargo test
-cargo audit                # no advisories (hickory-proto 0.25 advisories RUSTSEC-2026-0118, -0119 are ignored — fixed in 0.26 upgrade, see ROADMAP)
+cargo audit                # no advisories
 cargo deny check
 cargo tree | grep -ivE "openssl|bssl|aws-lc"  # must be empty
 ```

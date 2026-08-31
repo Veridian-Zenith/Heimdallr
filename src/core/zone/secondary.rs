@@ -16,11 +16,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tracing::{debug, error, info, warn};
 
-/// Perform an AXFR transfer from a primary and return a loaded `InMemoryAuthority`.
-///
-/// Sends a single AXFR query over TCP, receives all response messages,
-/// and assembles the complete zone.
-pub async fn axfr_from_primary(zone_name: &str, primary_addr: &str) -> Result<InMemoryZoneHandler> {
+/// Fetch raw records from a primary via AXFR.
+pub async fn axfr_records_from_primary(zone_name: &str, primary_addr: &str) -> Result<Vec<Record>> {
     let sock_addr: SocketAddr = primary_addr
         .parse()
         .with_context(|| format!("bad primary addr '{primary_addr}'"))?;
@@ -138,6 +135,18 @@ pub async fn axfr_from_primary(zone_name: &str, primary_addr: &str) -> Result<In
         "axfr: received {} records for zone {zone_name}",
         records.len()
     );
+
+    Ok(records)
+}
+
+/// Perform an AXFR transfer from a primary and return a loaded `InMemoryAuthority`.
+///
+/// Sends a single AXFR query over TCP, receives all response messages,
+/// and assembles the complete zone.
+pub async fn axfr_from_primary(zone_name: &str, primary_addr: &str) -> Result<InMemoryZoneHandler> {
+    let origin =
+        Name::from_ascii(zone_name).with_context(|| format!("invalid zone name '{zone_name}'"))?;
+    let records = axfr_records_from_primary(zone_name, primary_addr).await?;
 
     // Build InMemoryZoneHandler from collected records
     let authority = InMemoryZoneHandler::empty(origin, ZoneType::Primary, AxfrPolicy::Deny, None);

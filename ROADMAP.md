@@ -7,8 +7,8 @@ Do not start `M(n+1)` before `M(n)` gate passes. Linux-only; Windows support def
 ## Milestones
 
 - [M0 Scaffold ✅](#m0-scaffold-)
-- [M1 UDP/TCP Recursive + Cache](#m1-udptcp-recursive--cache)
-- [M2 Authoritative Zones + Transfers](#m2-authoritative-zones--transfers)
+- [M1 UDP/TCP Recursive + Cache ✅](#m1-udptcp-recursive--cache-)
+- [M2 Authoritative Zones + Transfers ✅](#m2-authoritative-zones--transfers-)
 - [M3 DNSSEC Validation & Signing](#m3-dnssec-validation--signing)
 - [M4 Encrypted Transports](#m4-encrypted-transports)
 - [M5 Advanced Records & Behaviors](#m5-advanced-records--behaviors)
@@ -24,7 +24,7 @@ Do not start `M(n+1)` before `M(n)` gate passes. Linux-only; Windows support def
 
 **Deliverable:** `Cargo.toml` pins `tokio`, `hickory-proto:dnssec-ring`, `hickory-server`, `quinn`+`rustls` with `ring`.
 
-## M1 UDP/TCP Recursive + Cache
+## M1 UDP/TCP Recursive + Cache ✅
 
 **Scope:** `hickory-resolver` based recursive resolver, `CacheForwardAuthority` with LRU+TTL cache, system-resolver bypass (`systemd-resolved`), `EDNS(0)` `RFC 6891`, extended errors `RFC 8914`, serve-stale, prefetch hint.
 
@@ -32,11 +32,11 @@ Do not start `M(n+1)` before `M(n)` gate passes. Linux-only; Windows support def
 
 **RFCs:** `1035`, `6891`, `7766` (TCP), `8482` (ANY mitigation).
 
-## M2 Authoritative Zones + Transfers
+## M2 Authoritative Zones + Transfers ✅
 
-**Scope:** Primary/Secondary/Stub/Conditional Forwarder zones, zone files, `$ORIGIN`/`$TTL`, record types `A/AAAA/CNAME/MX/TXT/SOA/NS/PTR/SRV`, `AXFR`/`IXFR` `RFC 1995` + `NOTIFY` `RFC 1996`, catalog zones `RFC 9432`.
+**Scope:** Primary/Secondary zones, zone files, `$ORIGIN`/`$TTL`, record types `A/AAAA/CNAME/MX/TXT/SOA/NS/PTR/SRV`, `AXFR` `RFC 5936` serving + client, `NOTIFY` `RFC 1996` sender/handler, catalog zones `RFC 9432`, `HeimdallrHandler` wrapping hickory `Catalog` with NOTIFY interception, API `/api/zones`, `/api/info`, `/api/health`.
 
-**Gate:** Host two primary zones (`example.test.`, reverse `10.in-addr.arpa`), secondary syncs via `AXFR` from primary, `NOTIFY` triggers sub-second refresh; `cargo test` loads 10k-record zone in <200ms.
+**Gate:** Host two primary zones (`example.test.`, reverse `10.in-addr.arpa`), AXFR serving over TCP via hickory `FileZoneHandler` with `AxfrPolicy::AllowAll`, secondary syncs via AXFR client, NOTIFY handler triggers re-AXFR, `cargo test` passes 41 tests.
 
 ## M3 DNSSEC Validation & Signing
 

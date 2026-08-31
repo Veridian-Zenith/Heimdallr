@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Veridian Zenith
 
 pub mod doh;
+pub mod handler;
 pub mod proxy;
 pub mod quic;
 pub mod tcp;
@@ -19,9 +20,10 @@ use crate::core::cache::{CacheConfig, SharedCache, new_shared_cache};
 use crate::core::resolver::ResolverWrap;
 use crate::core::resolver::forward::CacheForwardAuthority;
 use crate::core::zone::ZoneManager;
+use crate::net::handler::HeimdallrHandler;
 use hickory_server::proto::rr::{LowerName, Name};
 use hickory_server::server::Server;
-use hickory_server::zone_handler::{Catalog, ZoneHandler};
+use hickory_server::zone_handler::ZoneHandler;
 
 /// `Net` binds listeners for `ROADMAP.md:M1,M2,M4` — UDP + TCP (`7766`) + DoT (`7858`) + DoQ (`9250`) + DoH (`8484`).
 pub struct Net {
@@ -51,8 +53,9 @@ impl Net {
         };
         let cache = new_shared_cache(cache_cfg);
 
-        let catalog = self.build_catalog(cache)?;
-        let mut server = Server::new(catalog);
+        let (catalog, secondaries) = self.build_catalog(cache)?;
+        let handler = HeimdallrHandler::new(catalog, secondaries);
+        let mut server = Server::new(handler);
 
         // Register UDP listeners
         for addr in &self.cfg.listen {
@@ -86,10 +89,16 @@ impl Net {
     }
 
     /// Build a `Catalog` with authoritative zones from config + a catch-all cache-aware forwarder.
-    fn build_catalog(&self, cache: SharedCache) -> Result<Catalog> {
+    fn build_catalog(
+        &self,
+        cache: SharedCache,
+    ) -> Result<(
+        hickory_server::zone_handler::Catalog,
+        Vec<handler::SecondaryZoneInfo>,
+    )> {
         // Load authoritative zones
         let zone_manager = ZoneManager::new(self.cfg.clone());
-        let mut catalog = zone_manager.load_all()?;
+        let (mut catalog, secondaries) = zone_manager.load_all()?;
 
         // Add catch-all cache-aware forwarder for recursive resolution
         let forwarder = self.build_cache_forwarder(cache)?;
@@ -98,7 +107,7 @@ impl Net {
             vec![Arc::new(forwarder) as Arc<dyn ZoneHandler>],
         );
 
-        Ok(catalog)
+        Ok((catalog, secondaries))
     }
 
     /// Build a `CacheForwardAuthority` — hickory-resolver + Heimdallr cache.

@@ -20,7 +20,7 @@ use tracing::info;
     about = "Heimdallr - DNS watcher (from-zero, OSL-3.0)"
 )]
 struct Args {
-    /// Config TOML path (default /etc/heimdallr/heimdallr.toml if exists, else built-in defaults)
+    /// Config TOML path (default /etc/heimdallr/config.toml if exists, else built-in defaults)
     #[arg(long)]
     config: Option<String>,
 
@@ -68,7 +68,7 @@ async fn main() -> anyhow::Result<()> {
     // Wire per docs/architecture.md — net ↔ core ↔ api (channels, not shared Mutex)
     let net = net::Net::new(cfg.clone());
     let core = core::Core::new(cfg.clone());
-    let api = api::Api::new(cfg.api.listen.clone());
+    let api = api::Api::new(cfg.clone());
     let dhcp = dhcp::Dhcp::new(cfg.dhcp.enable);
     let cluster = cluster::Cluster::new(cfg.cluster.enable);
 

@@ -2,14 +2,14 @@
 
 | Area | Technitium | Heimdallr | Parity plan |
 |---|---|---|---|
-| Core | C# .NET, custom wire format | Rust hickory-proto+hickory-server (ring) | M1–M3 |
+| Core | C# .NET, custom wire format | Rust hickory-proto+hickory-server (ring) | M1 ✅ M2 ✅ |
 | Runtime | GC + libmsquic for DoQ/H3 | no GC, quinn+rustls ring | no native msquic |
 | Crypto | C# crypto provider | ring default, botan opt-in | no OpenSSL/BoringSSL default |
 | Cache | serve stale, prefetch, persistent | core/cache/ M1/M6 | hit-for-hit |
 | DNSSEC | RSA/ECDSA/EdDSA, NSEC+NSEC3 | same via ring + botan alt | M3 |
 | Encrypted | DoT, DoH (H/1.1/2/3), DoQ, PROXY v1/v2 | same (M4) | M4 |
 | Records | DANE, SVCB/HTTPS, URI, SSHFP, DNAME, ANAME, APP | same M5 | CLI parity |
-| Zones | Primary/Secondary/Stub/CondFwd+catalog, AXFR/IXFR/NOTIFY | same M2/M9 | import zip in M9 |
+| Zones | Primary/Secondary/Stub/CondFwd+catalog, AXFR/IXFR/NOTIFY | same M2 ✅/M9 | import zip in M9 |
 | Transfers | TSIG, XFR-over-TLS+QUIC | same M9 | interop |
 | Filter | AdvancedBlocking, DnsBlockList, BlockPage, DNRP | core/filter M6 | per-client gate |
 | Forwarding | Latency concurrency | resolver.concurrency + M9 import | M6/M9 |

@@ -12,3 +12,4 @@
 | `branding.md` | Naming and marks |
 | `license.md` | OSL-3.0 |
 | `lessons-from-technitium.md` | Design decisions from Technitium experience |
+| `performance.md` | M1 benchmark results |

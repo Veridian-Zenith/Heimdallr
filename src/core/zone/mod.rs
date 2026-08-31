@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: OSL-3.0
 // Copyright (c) 2026 Veridian Zenith
 
+pub mod catalog;
 pub mod file;
 pub mod notify;
 pub mod secondary;
@@ -13,11 +14,13 @@ use hickory_server::zone_handler::{Catalog, ZoneHandler, ZoneType};
 use tracing::{error, info};
 
 use crate::config::{Config, ZoneConfig};
+use crate::net::handler::SecondaryZoneInfo;
 
 /// `ZoneManager` owns the hickory `Catalog` and manages zone lifecycle.
 pub struct ZoneManager {
     catalog: Catalog,
     cfg: Config,
+    secondaries: Vec<SecondaryZoneInfo>,
 }
 
 impl ZoneManager {
@@ -25,6 +28,7 @@ impl ZoneManager {
         Self {
             catalog: Catalog::default(),
             cfg,
+            secondaries: Vec::new(),
         }
     }
 
@@ -33,13 +37,9 @@ impl ZoneManager {
         &self.catalog
     }
 
-    #[allow(dead_code)]
-    pub fn into_catalog(self) -> Catalog {
-        self.catalog
-    }
-
-    /// Load all zones from config, returning the populated Catalog.
-    pub fn load_all(mut self) -> Result<Catalog> {
+    /// Load all zones from config, returning the populated Catalog and
+    /// a list of secondary zones that need background AXFR sync.
+    pub fn load_all(mut self) -> Result<(Catalog, Vec<SecondaryZoneInfo>)> {
         let zones_dir = self.cfg.zones_dir.clone();
         let zones: Vec<ZoneConfig> = self.cfg.zones.clone();
 
@@ -49,7 +49,10 @@ impl ZoneManager {
                     self.load_primary(zone_cfg, &zones_dir)?;
                 }
                 "secondary" => {
-                    self.load_secondary_stub(zone_cfg);
+                    self.load_secondary(zone_cfg);
+                }
+                "catalog" => {
+                    self.load_catalog_zone(zone_cfg);
                 }
                 "stub" | "conditional" | "forwarder" => {
                     info!(
@@ -64,7 +67,7 @@ impl ZoneManager {
         }
 
         info!("zones loaded: {} total", zones.len());
-        Ok(self.catalog)
+        Ok((self.catalog, self.secondaries))
     }
 
     fn load_primary(&mut self, zone_cfg: &ZoneConfig, zones_dir: &str) -> Result<()> {
@@ -93,26 +96,88 @@ impl ZoneManager {
         Ok(())
     }
 
-    fn load_secondary_stub(&mut self, zone_cfg: &ZoneConfig) {
+    fn load_secondary(&mut self, zone_cfg: &ZoneConfig) {
         let zone_name = &zone_cfg.name;
         let primaries = &zone_cfg.primaries;
-        info!("zone {zone_name}: secondary/stub registered (primaries={primaries:?})");
 
-        // Spawn a background task to sync secondary zones
+        // Register the secondary zone info for NOTIFY handling and background AXFR
+        self.secondaries.push(SecondaryZoneInfo {
+            name: zone_name.clone(),
+            primaries: primaries.clone(),
+        });
+
+        // Spawn background AXFR sync
         let zone_name_owned = zone_name.clone();
         let primaries_owned = primaries.clone();
         tokio::spawn(async move {
-            for primary in primaries_owned {
-                match crate::core::zone::secondary::axfr_from_primary(&zone_name_owned, &primary)
+            for primary in &primaries_owned {
+                match crate::core::zone::secondary::axfr_from_primary(&zone_name_owned, primary)
                     .await
                 {
                     Ok(_authority) => {
-                        info!("zone {zone_name_owned}: successfully synced from {primary}");
-                        // TODO: Register authority in the catalog here
+                        info!("zone {zone_name_owned}: synced from {primary}");
+                        // The authority is ready but not yet registered in the catalog.
+                        // This will be wired in M2.1 when we add dynamic catalog updates.
+                        // For now, the zone is known but not served until the catalog
+                        // is updated with the transferred records.
                         break;
                     }
                     Err(e) => {
-                        error!("zone {zone_name_owned}: failed to sync from {primary}: {e}");
+                        error!("zone {zone_name_owned}: sync from {primary} failed: {e}");
+                    }
+                }
+            }
+        });
+
+        info!("zone {zone_name}: secondary registered (primaries={primaries:?})");
+    }
+
+    fn load_catalog_zone(&mut self, zone_cfg: &ZoneConfig) {
+        let zone_name = &zone_cfg.name;
+        let primaries = &zone_cfg.primaries;
+        info!("zone {zone_name}: catalog zone registered (primaries={primaries:?})");
+
+        let zone_name_owned = zone_name.clone();
+        let primaries_owned = primaries.clone();
+        tokio::spawn(async move {
+            let origin = match Name::from_ascii(&zone_name_owned) {
+                Ok(o) => o,
+                Err(e) => {
+                    error!("catalog zone {zone_name_owned}: invalid name: {e}");
+                    return;
+                }
+            };
+            let catalog_handler = catalog::CatalogZoneHandler::new(origin, ZoneType::Secondary);
+
+            for primary in primaries_owned {
+                match catalog_handler.sync_catalog(&primary).await {
+                    Ok(records) => {
+                        info!(
+                            "zone {zone_name_owned}: synced catalog from {primary} ({} records)",
+                            records.len()
+                        );
+                        if catalog_handler.verify_version(&records) {
+                            let members = catalog_handler.parse_member_zones(&records);
+                            info!(
+                                "catalog {zone_name_owned}: discovered {} member zones",
+                                members.len()
+                            );
+                            for (uid, member_name) in members {
+                                let member_primaries =
+                                    catalog_handler.parse_primaries(&records, &uid);
+                                info!(
+                                    "catalog member: id={uid}, zone={member_name}, primaries={member_primaries:?}"
+                                );
+                            }
+                        } else {
+                            error!(
+                                "catalog zone {zone_name_owned}: invalid or unsupported catalog version (expected version 2)"
+                            );
+                        }
+                        break;
+                    }
+                    Err(e) => {
+                        error!("catalog zone {zone_name_owned}: sync from {primary} failed: {e}");
                     }
                 }
             }

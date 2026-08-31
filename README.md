@@ -11,7 +11,7 @@ Pure `ring` + `quinn`/`rustls` for DoQ/DoH — no `libmsquic`, no `OpenSSL`/`Bor
 
 ## Status
 
-`0.2.0-alpha` — M0 scaffold + M1 partial. See [ROADMAP.md](ROADMAP.md) for the parity ladder.
+`0.3.0-alpha` — M0 scaffold + M1 recursive + M2 authoritative zones. See [ROADMAP.md](ROADMAP.md) for the parity ladder.
 
 ## Quick start
 
