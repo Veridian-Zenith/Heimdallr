@@ -19,34 +19,46 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libbotan-3-dev || sudo apt-get install -y pkg-config libbotan-2-dev botan
+
       - name: Install Rust stable
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --component rustfmt,clippy
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
       - name: Install Rust cache
         uses: Swatinem/rust-cache@v2
+
       - name: Format check
         run: cargo fmt --check
+
       - name: Clippy
         run: cargo clippy -- -D warnings
+
       - name: OpenSSL ban (default must be pure ring)
         run: |
           cargo tree | grep -iE "openssl|bssl|aws-lc" && echo "banned crypto found" && exit 1 || echo "clean: ring only"
+
       - name: Audit
         run: |
           cargo install cargo-audit --locked && cargo audit --ignore RUSTSEC-2026-0118 --ignore RUSTSEC-2026-0119 || echo "audit known hickory-proto 0.25 vulns ignored (0.26 breaking API, see ROADMAP)"
+
       - name: Build
         run: cargo build
+
       - name: Test
         run: cargo test
+
       - name: Check-config smoke
         run: cargo run -- --check-config --config config/config.toml
-      - name: Install Botan dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libbotan-2-dev
+
       - name: Botan feature check
         run: cargo check --features botan-crypto
+
       - name: Run Benchmarks
         run: cargo bench
 
