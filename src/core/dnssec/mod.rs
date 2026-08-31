@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: OSL-3.0
 // Copyright (c) 2026 Veridian Zenith
 
-//! DNSSEC validation/signing — `ring` default, `botan` optional.
-//! `hickory-proto:dnssec-ring` covers `RSA`/`ECDSA`/`EdDSA` + `NSEC`/`NSEC3`; `botan-crypto` alt for HSM/agility.
+//! DNSSEC validation/signing — `ring` default, `botan` for HSM/DNSSEC agility.
+//! `hickory-proto:dnssec-ring` covers `RSA`/`ECDSA`/`EdDSA` + `NSEC`/`NSEC3`.
+//! Botan provides alternate crypto backend for DoT/DoH/DoQ TLS and future HSM support.
 
 pub mod keygen;
 
@@ -17,9 +18,7 @@ impl DnssecProvider for RingProvider {
     }
 }
 
-#[cfg(feature = "botan-crypto")]
 pub struct BotanProvider;
-#[cfg(feature = "botan-crypto")]
 impl DnssecProvider for BotanProvider {
     fn name(&self) -> &'static str {
         "botan"
@@ -27,10 +26,8 @@ impl DnssecProvider for BotanProvider {
 }
 
 pub fn provider_for(name: &str) -> Box<dyn DnssecProvider> {
-    #[cfg(feature = "botan-crypto")]
     if name == "botan" {
         return Box::new(BotanProvider);
     }
-    let _ = name;
     Box::new(RingProvider)
 }

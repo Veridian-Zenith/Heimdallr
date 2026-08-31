@@ -9,7 +9,7 @@ description = "Heimdallr - privacy & security DNS server (authoritative + recurs
 readme = "README.md"
 
 [features]
-default = []
+default = ["botan-crypto"]
 botan-crypto = ["dep:botan"]
 
 [dependencies]
@@ -22,7 +22,7 @@ quinn = { version = "0.11", features = ["ring"], default-features = false }
 rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"] }
 rustls-pki-types = "1"
 hex = "0.4"
-# Pure-Rust crypto via ring (no OpenSSL/BoringSSL/aws-lc). Botan optional for future custom DNSSEC/HSM.
+# Botan crypto backend — required for DoT/DoH/DoQ TLS, future HSM/DNSSEC agility
 botan = { version = "0.14", optional = true }
 futures = "0.3"
 anyhow = "1.0"

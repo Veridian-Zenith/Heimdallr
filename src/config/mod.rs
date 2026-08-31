@@ -571,10 +571,6 @@ impl Config {
                 self.dnssec.provider
             );
         }
-        #[cfg(not(feature = "botan-crypto"))]
-        if self.dnssec.provider == "botan" {
-            anyhow::bail!("botan provider requires --features botan-crypto");
-        }
 
         // Forward protocol
         match self.resolver.forward_protocol.as_str() {
