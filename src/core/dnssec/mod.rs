@@ -4,6 +4,8 @@
 //! DNSSEC validation/signing — `ring` default, `botan` optional.
 //! `hickory-proto:dnssec-ring` covers `RSA`/`ECDSA`/`EdDSA` + `NSEC`/`NSEC3`; `botan-crypto` alt for HSM/agility.
 
+pub mod keygen;
+
 pub trait DnssecProvider: Send + Sync {
     fn name(&self) -> &'static str;
 }

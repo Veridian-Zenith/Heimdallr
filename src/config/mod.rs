@@ -25,6 +25,9 @@ pub struct Config {
     /// at `/etc/letsencrypt/live/<host>/` (fullchain.pem + privkey.pem).
     #[serde(default)]
     pub tls: TlsConfig,
+    /// DNSSEC key management config.
+    #[serde(default)]
+    pub dnssec_keys: DnssecKeyConfig,
     #[serde(default)]
     pub resolver: ResolverConfig,
     #[serde(default)]
@@ -343,6 +346,44 @@ pub struct ZoneConfig {
     pub file: Option<String>,
     #[serde(default)]
     pub primaries: Vec<String>,
+    /// DNSSEC signing for primary zones. If true, signs the zone with RRSIG/DNSKEY/NSEC.
+    #[serde(default)]
+    pub dnssec_signing: bool,
+    /// DNSSEC signing algorithm: "ecdsa-p256" (default), "ecdsa-p384", "ed25519", "rsa-sha256".
+    #[serde(default = "default_dnssec_algorithm")]
+    pub dnssec_algorithm: String,
+    /// Path to DNSSEC signing key (PEM/DER). If omitted, auto-generate and store in keys_dir.
+    #[serde(default)]
+    pub dnssec_key: Option<String>,
+}
+
+fn default_dnssec_algorithm() -> String {
+    "ecdsa-p256".into()
+}
+
+// ── DNSSEC Key Config ────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DnssecKeyConfig {
+    /// Directory to store auto-generated signing keys.
+    #[serde(default = "default_keys_dir")]
+    pub keys_dir: String,
+    /// Trust anchor file path. If omitted, uses built-in root anchors.
+    #[serde(default)]
+    pub trust_anchor: Option<String>,
+}
+
+fn default_keys_dir() -> String {
+    "/var/lib/heimdallr/keys".into()
+}
+
+impl Default for DnssecKeyConfig {
+    fn default() -> Self {
+        Self {
+            keys_dir: default_keys_dir(),
+            trust_anchor: None,
+        }
+    }
 }
 
 // ── TLS ───────────────────────────────────────────────────────────────────────
@@ -431,6 +472,7 @@ impl Default for Config {
             zones: vec![],
             zones_dir: default_zones_dir(),
             tls: TlsConfig::default(),
+            dnssec_keys: DnssecKeyConfig::default(),
         }
     }
 }
@@ -557,6 +599,17 @@ impl Config {
             if zone.kind == "secondary" && zone.primaries.is_empty() {
                 anyhow::bail!("zone {}: secondary requires 'primaries'", zone.name);
             }
+            if zone.dnssec_signing {
+                match zone.dnssec_algorithm.as_str() {
+                    "ecdsa-p256" | "ecdsa-p384" | "ed25519" | "rsa-sha256" => {}
+                    other => {
+                        anyhow::bail!(
+                            "zone {}: dnssec_algorithm must be ecdsa-p256|ecdsa-p384|ed25519|rsa-sha256, got {other}",
+                            zone.name
+                        );
+                    }
+                }
+            }
         }
 
         // Zones dir
@@ -660,6 +713,7 @@ mod tests {
                 kind: "primary".into(),
                 file: None,
                 primaries: vec![],
+                ..Default::default()
             }],
             ..Default::default()
         };
@@ -673,6 +727,7 @@ mod tests {
                 kind: "secondary".into(),
                 file: None,
                 primaries: vec![],
+                ..Default::default()
             }],
             ..Default::default()
         };
@@ -686,6 +741,7 @@ mod tests {
                 kind: "invalid".into(),
                 file: None,
                 primaries: vec![],
+                ..Default::default()
             }],
             ..Default::default()
         };

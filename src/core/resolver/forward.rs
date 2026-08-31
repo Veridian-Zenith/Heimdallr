@@ -58,6 +58,7 @@ pub struct CacheForwardAuthority {
     origin: LowerName,
     resolver: HickoryResolver<TokioRuntimeProvider>,
     cache: SharedCache,
+    dnssec_enabled: bool,
 }
 
 impl CacheForwardAuthority {
@@ -65,11 +66,13 @@ impl CacheForwardAuthority {
         origin: LowerName,
         resolver: HickoryResolver<TokioRuntimeProvider>,
         cache: SharedCache,
+        dnssec_enabled: bool,
     ) -> Self {
         Self {
             origin,
             resolver,
             cache,
+            dnssec_enabled,
         }
     }
 
@@ -157,7 +160,7 @@ impl ZoneHandler for CacheForwardAuthority {
     }
 
     fn can_validate_dnssec(&self) -> bool {
-        false
+        self.dnssec_enabled
     }
 
     async fn update(

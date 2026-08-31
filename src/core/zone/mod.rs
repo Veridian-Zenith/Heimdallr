@@ -89,6 +89,42 @@ impl ZoneManager {
 
         let origin = LowerName::from(Name::from_ascii(&zone_name).context("invalid zone name")?);
 
+        // M3: DNSSEC signing — generate/load key and sign zone
+        if zone_cfg.dnssec_signing {
+            use hickory_server::zone_handler::DnssecZoneHandler;
+
+            let keys_dir = &self.cfg.dnssec_keys.keys_dir;
+            let key_path = crate::core::dnssec::keygen::resolve_key_path(
+                &zone_name,
+                zone_cfg.dnssec_key.as_deref(),
+                &zone_cfg.dnssec_algorithm,
+                keys_dir,
+            )
+            .with_context(|| format!("zone {zone_name}: resolve DNSSEC key"))?;
+
+            let signer = crate::core::dnssec::keygen::load_signer(
+                &key_path,
+                &zone_name,
+                &zone_cfg.dnssec_algorithm,
+            )
+            .with_context(|| format!("zone {zone_name}: load DNSSEC signer"))?;
+
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(authority.add_zone_signing_key(signer))
+            })
+            .map_err(|e| anyhow::anyhow!("zone {zone_name}: add signing key: {e}"))?;
+
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(authority.secure_zone())
+            })
+            .map_err(|e| anyhow::anyhow!("zone {zone_name}: secure zone: {e}"))?;
+
+            info!(
+                "zone {zone_name}: DNSSEC signed ({})",
+                zone_cfg.dnssec_algorithm
+            );
+        }
+
         self.catalog
             .upsert(origin, vec![Arc::new(authority) as Arc<dyn ZoneHandler>]);
 

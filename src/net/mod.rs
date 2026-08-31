@@ -112,11 +112,19 @@ impl Net {
 
     /// Build a `CacheForwardAuthority` — hickory-resolver + Heimdallr cache.
     fn build_cache_forwarder(&self, cache: SharedCache) -> Result<CacheForwardAuthority> {
-        let resolver_wrap = ResolverWrap::from_config(&self.cfg.resolver)?;
+        let dnssec_enabled = self.cfg.dnssec.validation;
+        let resolver_wrap = ResolverWrap::from_config(&self.cfg.resolver, dnssec_enabled)?;
         let resolver = resolver_wrap.into_inner();
         let origin = LowerName::from(Name::root());
 
-        info!("net: cache-aware forwarder configured (recursive resolution via hickory-resolver)");
-        Ok(CacheForwardAuthority::new(origin, resolver, cache))
+        info!(
+            "net: cache-aware forwarder configured (recursive resolution via hickory-resolver, dnssec={dnssec_enabled})"
+        );
+        Ok(CacheForwardAuthority::new(
+            origin,
+            resolver,
+            cache,
+            dnssec_enabled,
+        ))
     }
 }

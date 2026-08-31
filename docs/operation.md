@@ -47,7 +47,7 @@ RUST_LOG=heimdallr=debug,quinn=info heimdallr
 ## API
 
 ```bash
-curl http://127.0.0.1:5380/api/health   # {"status":"ok","version":"0.3.0-alpha"}
+curl http://127.0.0.1:5380/api/health   # {"status":"ok","version":"0.4.0-alpha"}
 curl http://127.0.0.1:5380/api/info      # server info (listen, zones, cache, DNSSEC)
 curl http://127.0.0.1:5380/api/zones     # list all configured zones
 curl http://127.0.0.1:5380/api/zones/example.test.  # zone detail

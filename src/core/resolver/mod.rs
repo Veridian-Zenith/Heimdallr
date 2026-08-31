@@ -14,7 +14,7 @@ use hickory_resolver::{
     Resolver as HickoryResolver,
     config::{NameServerConfig, ResolverConfig, ResolverOpts},
 };
-use std::{net::SocketAddr, path::Path, str::FromStr};
+use std::{net::SocketAddr, path::Path, str::FromStr, sync::Arc};
 use tracing::debug;
 
 use crate::config::ResolverConfig as Cfg;
@@ -24,10 +24,11 @@ const SYSTEMD_RESOLVED_STUB: &str = "127.0.0.53:53";
 
 pub struct ResolverWrap {
     inner: HickoryResolver<TokioRuntimeProvider>,
+    dnssec_enabled: bool,
 }
 
 impl ResolverWrap {
-    pub fn from_config(cfg: &Cfg) -> Result<Self> {
+    pub fn from_config(cfg: &Cfg, dnssec_enabled: bool) -> Result<Self> {
         let mut rc = ResolverConfig::default();
         for f in &cfg.forwarders {
             let addr = SocketAddr::from_str(f).with_context(|| format!("bad forwarder {f}"))?;
@@ -47,9 +48,6 @@ impl ResolverWrap {
         }
 
         // M1: System-resolver bypass — detect systemd-resolved and add fallback.
-        // If systemd-resolved manages resolv.conf, its stub listener at 127.0.0.53
-        // forwards to the real upstream. Adding it as a last-resort nameserver means
-        // queries still resolve even if configured forwarders are unreachable.
         if let Some(sys_addr) = Self::detect_system_resolver() {
             let addr: SocketAddr = sys_addr.parse().expect("system resolver address is valid");
             let mut ns_config = NameServerConfig::udp(addr.ip());
@@ -63,27 +61,39 @@ impl ResolverWrap {
         opts.attempts = cfg.concurrency as usize;
         opts.recursion_desired = true;
 
-        let resolver = HickoryResolver::builder_with_config(rc, TokioRuntimeProvider::default())
-            .with_options(opts)
-            .build()
-            .context("build resolver")?;
+        // M3: DNSSEC validation — enable on the resolver when configured
+        if dnssec_enabled {
+            opts.validate = true;
+            debug!("dnssec: resolver validation enabled");
+        }
 
-        Ok(Self { inner: resolver })
+        let builder = HickoryResolver::builder_with_config(rc, TokioRuntimeProvider::default())
+            .with_options(opts);
+
+        // M3: Attach built-in root trust anchors when DNSSEC validation is enabled
+        let builder = if dnssec_enabled {
+            let trust_anchors = Arc::new(hickory_proto::dnssec::TrustAnchors::default());
+            debug!("dnssec: attached built-in root trust anchors (20326, 38696)");
+            builder.with_trust_anchor(trust_anchors)
+        } else {
+            builder
+        };
+
+        let resolver = builder.build().context("build resolver")?;
+
+        Ok(Self {
+            inner: resolver,
+            dnssec_enabled,
+        })
     }
 
     /// Detect the system resolver for fallback.
-    ///
-    /// Returns `Some("127.0.0.53:53")` if systemd-resolved is detected
-    /// (stub-resolv.conf exists), `Some("127.0.0.1:53")` if /etc/resolv.conf
-    /// points to a non-loopback address, or `None` if no bypass is needed.
     fn detect_system_resolver() -> Option<&'static str> {
-        // systemd-resolved stub: /run/systemd/resolve/stub-resolv.conf
         if Path::new("/run/systemd/resolve/stub-resolv.conf").exists() {
             debug!("systemd-resolved detected (stub-resolv.conf exists)");
             return Some(SYSTEMD_RESOLVED_STUB);
         }
 
-        // Also check /etc/resolv.conf — if it points to 127.0.0.53, resolved is active
         if let Ok(content) = std::fs::read_to_string("/etc/resolv.conf") {
             for line in content.lines() {
                 let line = line.trim();
@@ -106,6 +116,10 @@ impl ResolverWrap {
 
     pub fn into_inner(self) -> HickoryResolver<TokioRuntimeProvider> {
         self.inner
+    }
+
+    pub fn is_dnssec_enabled(&self) -> bool {
+        self.dnssec_enabled
     }
 }
 
