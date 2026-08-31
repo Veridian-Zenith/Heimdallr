@@ -6,7 +6,7 @@ Rules are short — Heimdallr is DNS, not a web toy.
 
 - Open an issue for anything larger than a typo. State intent and affected [ROADMAP.md](ROADMAP.md) milestone.
 - One idea per PR.
-- Read [docs/architecture.md](docs/architecture.md).
+- Read [README.md](README.md#architecture).
 
 ## Must pass before opening PR
 

@@ -15,13 +15,15 @@ botan-crypto = ["dep:botan"]
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 hickory-proto = { version = "0.26.1", features = ["dnssec-ring"] }
-hickory-resolver = { version = "0.26.1", features = ["tokio", "dnssec-ring"] }
-hickory-server = { version = "0.26.1", features = ["dnssec-ring", "resolver", "testing"] }
+hickory-resolver = { version = "0.26.1", features = ["tokio", "dnssec-ring", "tls-ring", "https-ring", "quic-ring"] }
+hickory-server = { version = "0.26.1", features = ["dnssec-ring", "resolver", "testing", "tls-ring", "https-ring", "quic-ring"] }
 hickory-net = "0.26.1"
 quinn = { version = "0.11", features = ["ring"], default-features = false }
 rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"] }
 rustls-pki-types = "1"
 hex = "0.4"
+ring = "0.17"
+rcgen = { version = "0.13", features = ["ring"] }
 # Botan crypto backend — required for DoT/DoH/DoQ TLS, future HSM/DNSSEC agility
 botan = { version = "0.14", optional = true }
 futures = "0.3"

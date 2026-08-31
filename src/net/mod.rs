@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: OSL-3.0
 // Copyright (c) 2026 Veridian Zenith
 
+pub mod cert;
 pub mod doh;
 pub mod handler;
 pub mod proxy;
@@ -10,6 +11,7 @@ pub mod tls;
 pub mod udp;
 
 use anyhow::Result;
+use rustls::server::ResolvesServerCert;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -81,7 +83,89 @@ impl Net {
             server.register_listener(tcp_listener, Duration::from_secs(5), 4096);
         }
 
-        // M4: TLS / QUIC / HTTPS listeners would be registered here
+        // M4: Load TLS cert once for all encrypted listeners (DoT/DoH/DoQ).
+        let has_tls_listeners = !self.cfg.listen_tls.is_empty()
+            || !self.cfg.listen_https.is_empty()
+            || !self.cfg.listen_quic.is_empty();
+
+        let cert_resolver: Option<Arc<dyn ResolvesServerCert>> = if has_tls_listeners {
+            let cert_result = crate::net::cert::resolve_cert_paths(
+                self.cfg.tls.cert.as_deref(),
+                self.cfg.tls.key.as_deref(),
+                &self.cfg.host,
+                &self.cfg.tls.letsencrypt_dir,
+            );
+
+            let (cert_path, key_path) = match cert_result {
+                Ok(paths) => paths,
+                Err(e) if self.cfg.tls.self_signed_enabled() => {
+                    info!("tls: {e} — generating self-signed cert (self_signed=true)");
+                    crate::net::cert::generate_self_signed(
+                        &self.cfg.host,
+                        &self.cfg.dnssec_keys.keys_dir,
+                    )?
+                }
+                Err(e) => return Err(e),
+            };
+
+            Some(crate::net::cert::load_tls_cert(&cert_path, &key_path)?)
+        } else {
+            None
+        };
+
+        // M4: DoT listeners — RFC 7858
+        if let Some(ref resolver) = cert_resolver {
+            for addr in &self.cfg.listen_tls {
+                let sock_addr: SocketAddr = addr
+                    .parse()
+                    .map_err(|e| anyhow::anyhow!("bad listen_tls addr '{addr}': {e}"))?;
+                let tcp_listener = tokio::net::TcpListener::bind(sock_addr)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("bind tls {sock_addr}: {e}"))?;
+                info!("dot listening on {sock_addr}");
+                server
+                    .register_tls_listener(tcp_listener, Duration::from_secs(30), resolver.clone())
+                    .map_err(|e| anyhow::anyhow!("register_tls_listener {sock_addr}: {e}"))?;
+            }
+        }
+
+        // M4: DoH listeners — RFC 8484
+        if let Some(ref resolver) = cert_resolver {
+            for addr in &self.cfg.listen_https {
+                let sock_addr: SocketAddr = addr
+                    .parse()
+                    .map_err(|e| anyhow::anyhow!("bad listen_https addr '{addr}': {e}"))?;
+                let tcp_listener = tokio::net::TcpListener::bind(sock_addr)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("bind https {sock_addr}: {e}"))?;
+                info!("doh listening on {sock_addr}");
+                server
+                    .register_https_listener(
+                        tcp_listener,
+                        Duration::from_secs(30),
+                        resolver.clone(),
+                        Some(self.cfg.host.clone()),
+                        "/dns-query".to_string(),
+                    )
+                    .map_err(|e| anyhow::anyhow!("register_https_listener {sock_addr}: {e}"))?;
+            }
+        }
+
+        // M4: DoQ listeners — RFC 9250
+        if let Some(ref resolver) = cert_resolver {
+            for addr in &self.cfg.listen_quic {
+                let sock_addr: SocketAddr = addr
+                    .parse()
+                    .map_err(|e| anyhow::anyhow!("bad listen_quic addr '{addr}': {e}"))?;
+                let udp_socket = tokio::net::UdpSocket::bind(sock_addr)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("bind quic {sock_addr}: {e}"))?;
+                info!("doq listening on {sock_addr}");
+                server
+                    .register_quic_listener(udp_socket, Duration::from_secs(30), resolver.clone())
+                    .map_err(|e| anyhow::anyhow!("register_quic_listener {sock_addr}: {e}"))?;
+            }
+        }
 
         info!("net: all listeners registered, serving");
         server.block_until_done().await?;

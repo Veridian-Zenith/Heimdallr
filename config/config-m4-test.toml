@@ -1,0 +1,58 @@
+# M4 Encrypted Transports — test configuration
+# Self-signed certs (private/dev use only, off by default)
+# Tests: DoT (853), DoH (443), DoQ (853)
+
+listen = ["127.0.0.1:5354"]
+listen_tls = ["127.0.0.1:853"]
+listen_quic = ["127.0.0.1:853"]
+listen_https = ["127.0.0.1:443"]
+
+host = "ns1.example.test."
+zones_dir = "/etc/heimdallr/zones"
+
+[tls]
+self_signed = true
+
+[resolver]
+forwarders = ["9.9.9.11:53"]
+forward_protocol = "udp"
+qname_minimization = true
+concurrency = 2
+timeout_ms = 2000
+
+[cache]
+size = 50000
+serve_stale = true
+prefetch = 2
+
+[dnssec]
+validation = true
+signing = false
+provider = "ring"
+
+[dnssec_keys]
+keys_dir = "/var/lib/heimdallr/keys"
+
+[filter]
+cname_cloaking = true
+rebinding = true
+
+[proxy]
+enable = false
+protocol = "v2"
+
+[api]
+listen = "127.0.0.1:5381"
+
+[auth]
+totp = false
+oidc = false
+
+[log]
+level = "info"
+format = "json"
+
+[[zones]]
+name = "example.test."
+kind = "primary"
+file = "example.test.zone"

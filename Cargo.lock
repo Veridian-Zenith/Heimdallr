@@ -149,6 +149,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "base64"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+
+[[package]]
 name = "bitflags"
 version = "2.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -474,6 +480,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d45db016d36b838f563236e9193d0ee6ce38f3f68b6c94e914b4929c96bbb890"
 
 [[package]]
+name = "fnv"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
+
+[[package]]
 name = "form_urlencoded"
 version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -598,6 +610,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "h2"
+version = "0.4.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef8e5e5a340588f4452631496976cf8636d4a7ecf600239fdc27615d2530bc16"
+dependencies = [
+ "atomic-waker",
+ "bytes",
+ "fnv",
+ "futures-core",
+ "futures-sink",
+ "http",
+ "indexmap",
+ "slab",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "half"
 version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -637,6 +668,8 @@ dependencies = [
  "hickory-resolver",
  "hickory-server",
  "quinn",
+ "rcgen",
+ "ring",
  "rustls",
  "rustls-pki-types",
  "serde",
@@ -667,24 +700,31 @@ checksum = "e2295ed2f9c31e471e1428a8f88a3f0e1f4b27c15049592138d1eebe9c35b183"
 dependencies = [
  "async-trait",
  "bitflags",
+ "bytes",
  "cfg-if",
  "data-encoding",
  "futures-channel",
  "futures-io",
  "futures-util",
+ "h2",
  "hickory-proto",
+ "http",
  "idna",
  "ipnet",
  "jni",
  "lru-cache",
  "parking_lot",
+ "pin-project-lite",
+ "quinn",
  "rand",
  "ring",
+ "rustls",
  "rustls-pki-types",
  "thiserror",
  "time",
  "tinyvec",
  "tokio",
+ "tokio-rustls",
  "tracing",
  "url",
 ]
@@ -730,13 +770,16 @@ dependencies = [
  "ndk-context",
  "once_cell",
  "parking_lot",
+ "quinn",
  "rand",
  "resolv-conf",
+ "rustls",
  "serde",
  "smallvec",
  "system-configuration",
  "thiserror",
  "tokio",
+ "tokio-rustls",
  "tracing",
 ]
 
@@ -751,15 +794,19 @@ dependencies = [
  "cfg-if",
  "data-encoding",
  "futures-util",
+ "h2",
  "hickory-net",
  "hickory-proto",
  "hickory-resolver",
+ "http",
  "ipnet",
  "prefix-trie",
+ "rustls",
  "serde",
  "thiserror",
  "time",
  "tokio",
+ "tokio-rustls",
  "tokio-util",
  "tracing",
 ]
@@ -1263,6 +1310,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pem"
+version = "3.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d30c53c26bc5b31a98cd02d20f25a7c8567146caf63ed593a9d87b2775291be"
+dependencies = [
+ "base64",
+ "serde_core",
+]
+
+[[package]]
 name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1355,6 +1412,7 @@ dependencies = [
  "quinn-proto",
  "quinn-udp",
  "rustc-hash",
+ "rustls",
  "socket2",
  "thiserror",
  "tokio",
@@ -1375,6 +1433,7 @@ dependencies = [
  "rand_pcg",
  "ring",
  "rustc-hash",
+ "rustls",
  "rustls-pki-types",
  "slab",
  "thiserror",
@@ -1456,6 +1515,19 @@ checksum = "22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
+]
+
+[[package]]
+name = "rcgen"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75e669e5202259b5314d1ea5397316ad400819437857b90861765f24c4cf80a2"
+dependencies = [
+ "pem",
+ "ring",
+ "rustls-pki-types",
+ "time",
+ "yasna",
 ]
 
 [[package]]
@@ -1550,6 +1622,7 @@ version = "0.23.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0283386ce02abc0151e1761d08802dfe86c173b0b494af5cbc086574e453da06"
 dependencies = [
+ "log",
  "once_cell",
  "ring",
  "rustls-pki-types",
@@ -1959,6 +2032,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-rustls"
+version = "0.26.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1729aa945f29d91ba541258c8df89027d5792d85a8841fb65e8bf0f4ede4ef61"
+dependencies = [
+ "rustls",
+ "tokio",
+]
+
+[[package]]
 name = "tokio-util"
 version = "0.7.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1967,6 +2050,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "libc",
  "pin-project-lite",
  "tokio",
 ]
@@ -2378,6 +2462,15 @@ name = "writeable"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
+
+[[package]]
+name = "yasna"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e17bb3549cc1321ae1296b9cdc2698e2b6cb1992adfa19a8c72e5b7a738f44cd"
+dependencies = [
+ "time",
+]
 
 [[package]]
 name = "yoke"

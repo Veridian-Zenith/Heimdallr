@@ -455,6 +455,10 @@ pub struct TlsConfig {
     pub key: Option<String>,
     #[serde(default = "default_letsencrypt_dir")]
     pub letsencrypt_dir: String,
+    /// Generate a self-signed cert if no real cert is found.
+    /// Off by default — only for private/dev environments.
+    #[serde(default)]
+    pub self_signed: bool,
 }
 
 fn default_letsencrypt_dir() -> String {
@@ -467,6 +471,7 @@ impl Default for TlsConfig {
             cert: None,
             key: None,
             letsencrypt_dir: default_letsencrypt_dir(),
+            self_signed: false,
         }
     }
 }
@@ -496,14 +501,16 @@ impl TlsConfig {
                 .join("privkey.pem")
         };
 
-        if !cert.exists() {
-            anyhow::bail!("TLS cert not found: {}", cert.display());
-        }
-        if !key.exists() {
-            anyhow::bail!("TLS key not found: {}", key.display());
+        if cert.exists() && key.exists() {
+            return Ok((cert, key));
         }
 
-        Ok((cert, key))
+        anyhow::bail!("TLS cert not found: {}", cert.display());
+    }
+
+    /// Whether to generate a self-signed cert if no real cert is found.
+    pub fn self_signed_enabled(&self) -> bool {
+        self.self_signed
     }
 }
 

@@ -30,17 +30,23 @@ pub struct ResolverWrap {
 impl ResolverWrap {
     pub fn from_config(cfg: &Cfg, dnssec_enabled: bool) -> Result<Self> {
         let mut rc = ResolverConfig::default();
+        let tls_host = Self::extract_tls_host(cfg);
         for f in &cfg.forwarders {
             let addr = SocketAddr::from_str(f).with_context(|| format!("bad forwarder {f}"))?;
             let ns_config = match cfg.forward_protocol.as_str() {
                 "udp" => NameServerConfig::udp(addr.ip()),
                 "tcp" => NameServerConfig::tcp(addr.ip()),
-                "dot" | "doh" | "doq" => {
-                    tracing::warn!(
-                        "forward_protocol {} needs M4 tls/https/quic feature, falling back to udp for now",
-                        cfg.forward_protocol
-                    );
-                    NameServerConfig::udp(addr.ip())
+                "dot" => {
+                    let server_name: Arc<str> = tls_host.as_str().into();
+                    NameServerConfig::tls(addr.ip(), server_name)
+                }
+                "doh" => {
+                    let server_name: Arc<str> = tls_host.as_str().into();
+                    NameServerConfig::https(addr.ip(), server_name, None)
+                }
+                "doq" => {
+                    let server_name: Arc<str> = tls_host.as_str().into();
+                    NameServerConfig::quic(addr.ip(), server_name)
                 }
                 _ => NameServerConfig::udp(addr.ip()),
             };
@@ -120,6 +126,18 @@ impl ResolverWrap {
 
     pub fn is_dnssec_enabled(&self) -> bool {
         self.dnssec_enabled
+    }
+
+    /// Extract the TLS hostname from forwarder addresses for DoT/DoH/DoQ SNI.
+    ///
+    /// Uses the first forwarder address's host as the TLS server name. This works
+    /// because DoT/DoH/DoQ all use the same TLS SNI to identify the server.
+    fn extract_tls_host(cfg: &Cfg) -> String {
+        cfg.forwarders
+            .first()
+            .and_then(|f| f.split(':').next())
+            .unwrap_or("1.1.1.1")
+            .to_string()
     }
 }
 
