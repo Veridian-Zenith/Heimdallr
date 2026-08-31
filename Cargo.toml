@@ -23,7 +23,7 @@ rustls = { version = "0.23", default-features = false, features = ["std", "ring"
 rustls-pki-types = "1"
 hex = "0.4"
 ring = "0.17"
-rcgen = { version = "0.13", features = ["ring"] }
+rcgen = { version = "0.14", features = ["ring"] }
 # Botan crypto backend — required for DoT/DoH/DoQ TLS, future HSM/DNSSEC agility
 botan = { version = "0.14", optional = true }
 futures = "0.3"
@@ -37,7 +37,7 @@ axum = { version = "0.8", features = ["json"] }
 async-trait = "0.1"
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["async_tokio"] }
+criterion = { version = "0.8", features = ["async_tokio"] }
 tempfile = "3"
 
 [[bench]]
