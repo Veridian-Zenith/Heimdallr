@@ -13,6 +13,24 @@
 
 ---
 
+<p align="center">
+  <a href="src/core/resolver/qname_min.rs"><img src="https://img.shields.io/badge/M5.4-QNAME%20min%20%E2%9C%93%20RFC%209156-2ea44f?style=for-the-badge" alt="M5.4 QNAME minimization"></a>
+  <a href="tests/qname-min-validate.sh"><img src="https://img.shields.io/badge/gate-qname--min--validate-1f6feb?style=for-the-badge" alt="validation gate"></a>
+  <a href="plans/m5_design.md"><img src="https://img.shields.io/badge/design-m5_design.md-orange?style=for-the-badge" alt="design doc"></a>
+</p>
+
+<p align="center">
+  🛡️ <strong>opt-in</strong>
+  &nbsp;·&nbsp;
+  🔬 peels <code>com.</code> → <code>example.com.</code> → <code>…</code>
+  &nbsp;·&nbsp;
+  🔁 falls back on every-step error
+  &nbsp;·&nbsp;
+  ⚙️ default <code>enable = false</code>
+</p>
+
+---
+
 From-zero Rust DNS server built to replace [Technitium DNS Server](https://technitium.com/) long-term. No code copied — wire format implemented from RFCs via `hickory-proto`/`hickory-server`.
 
 **Pure `ring` + `quinn`/`rustls` + `Botan`** — no `OpenSSL`/`BoringSSL`/`aws-lc-rs` in default build.
@@ -21,7 +39,7 @@ From-zero Rust DNS server built to replace [Technitium DNS Server](https://techn
 |---|---|
 | **Binary** | `heimdallr` (single static binary, Linux) |
 | **License** | `OSL-3.0` — network use counts as distribution |
-| **Status** | `0.4.0-alpha` — M0 ✅ M1 ✅ M2 ✅ M3 ✅ M4 ✅ |
+| **Status** | `0.4.0-alpha` — M0 ✅ M1 ✅ M2 ✅ M3 ✅ M4 ✅ **M5.4 ✅** |
 
 ---
 
@@ -98,7 +116,7 @@ src/
     handler.rs  HeimdallrHandler — wraps Catalog with NOTIFY interception
     mod.rs      hickory-server listeners (UDP/TCP/DoT/DoH/DoQ) + PROXY TCP spawn
   core/
-    resolver.rs hickory-resolver wrapper with DNSSEC validation
+    resolver/   hickory-resolver wrapper + DNSSEC validation + QNAME minimization (M5.4)
     cache/      LRU + TTL, serve-stale, prefetch
     zone/       primary/secondary/catalog, AXFR/IXFR/NOTIFY, record CRUD
     dnssec/     validation (ring) + signing + key management (botan optional)
@@ -133,12 +151,13 @@ Milestones are gates — do not start `M(n+1)` before `M(n)` passes. Linux-only;
 | **M2** Authoritative Zones + Transfers | Primary/Secondary zones, AXFR serving + client, NOTIFY handler, catalog zones RFC 9432, API `/api/zones` | ✅ |
 | **M3** DNSSEC Validation & Signing | Validation via `TrustAnchors`, ECDSA/Ed25519 key generation, zone signing (`RRSIG`/`DNSKEY`/`NSEC`/`NSEC3`), DANE TLSA CRUD, NSEC3 config | ✅ |
 | **M4** Encrypted Transports | DoT RFC 7858 (`rustls:ring`), DoH RFC 8484 (`h2`), DoQ RFC 9250 (`quinn:ring`), PROXY protocol v1/v2, forwarder routing over DoT/DoH/DoQ, API TLS | ✅ |
+| **M5.4** QNAME Minimization | RFC 9156 incremental label-peeling in [`src/core/resolver/qname_min.rs`](src/core/resolver/qname_min.rs), opt-in (`resolver.qname_minimization.enable`), fallback to full-QNAME on every-step error, mode selector (`incremental`/`aggressive`/`strict`), 10 unit tests + [`tests/qname-min-validate.sh`](tests/qname-min-validate.sh) | ✅ |
 
 ### In progress
 
 | Milestone | Scope | Gate |
 |-----------|-------|------|
-| **M5** Advanced Records & Behaviors | SVCB/HTTPS, URI, SSHFP, DNAME, ANAME (apex CNAME flattening), QNAME minimization RFC 9156, case randomization, CNAME cloaking, DANE hash auto-gen, DNS64, EDNS Client Subnet | |
+| **M5** Advanced Records & Behaviors | SVCB/HTTPS, URI, SSHFP, DNAME, ANAME (apex CNAME flattening), case randomization, CNAME cloaking, DANE hash auto-gen, DNS64, EDNS Client Subnet | |
 
 ### Planned
 
@@ -159,6 +178,7 @@ Milestones are gates — do not start `M(n+1)` before `M(n)` passes. Linux-only;
 | M2 | AXFR over TCP, NOTIFY triggers re-AXFR, `cargo test` 41+ tests |
 | M3 | `delv @127.0.0.1` validates signed zones, `ldns-verify-zone` passes |
 | M4 | `kdig -d @127.0.0.1 +tls`, `curl --doh-url https://127.0.0.1/dns-query`, QUIC client all resolve |
+| M5.4 | `./tests/qname-min-validate.sh` (requires `RUST_LOG=heimdallr=debug` for trace assertion) |
 
 </details>
 
@@ -178,6 +198,12 @@ heimdallr --check-config
 
 # Custom config
 heimdallr --config /etc/heimdallr/config.toml
+
+# Enable QNAME minimization (opt-in, M5.4)
+# Add to [resolver] in config.toml:
+#   qname_minimization.enable = true
+#   qname_minimization.mode    = "strict"   # or "incremental" | "aggressive"
+#   qname_minimization.max_iterations = 7
 ```
 
 ---
@@ -220,7 +246,17 @@ zones_dir = "/etc/heimdallr/zones"
 [resolver]
 forwarders = ["1.1.1.1:53", "8.8.8.8:53"]
 forward_protocol = "udp"         # udp|tcp|dot|doh|doq
-qname_minimization = true
+
+# QNAME minimization (M5.4, RFC 9156) — opt-in. Default enable=false.
+# When enabled, the forwarder issues one query per label step
+# (com. -> example.com. -> -> original name) instead of a single
+# full-QNAME lookup. Falls back to the unminimized query if every
+# peel step errors. Modes: incremental | aggressive | strict.
+[resolver.qname_minimization]
+# enable = false
+# mode = "strict"
+# max_iterations = 7
+
 qname_randomization = false
 ecs = false
 concurrency = 2
@@ -437,7 +473,7 @@ cargo audit
 
 | RFC | Title | Status |
 |-----|-------|--------|
-| 9156 | QNAME minimization | M5 |
+| 9156 | QNAME minimization | ✅ **M5.4** — `qname_min.rs` (opt-in) |
 | 7871 | EDNS Client Subnet | M5 |
 | 8914 | Extended DNS Errors | ✅ M1 |
 | 7314 | EDNS EXPIRE | M5 |
@@ -468,7 +504,7 @@ Heimdallr is a DNS server — every UDP packet is untrusted, every TCP/TLS/QUIC 
 | Surface | Risk | Mitigation |
 |---------|------|------------|
 | **Packet parsing** (`net/`, `hickory-proto`) | Parser CVEs, label compression loops, RDLENGTH OOM | Rust `forbid(unsafe)`, hickory fuzzed upstream, EDNS bufsize caps |
-| **Cache poisoning** | TXID/port brute force, Kaminsky, NS glue hijack | Randomized TXID+port, QNAME minimization, DNSSEC (M3) |
+| **Cache poisoning** | TXID/port brute force, Kaminsky, NS glue hijack | Randomized TXID+port, **QNAME minimization (M5.4)**, DNSSEC (M3) |
 | **Encrypted transports** | rustls/quinn handshake DoS, SNI leak | ring crypto, forward_protocol pinned, PROXY allowlist |
 | **Zone transfers** | Unauthorized AXFR dump | allow-transfer ACL, ZONEMD (M9) |
 | **Web API :5380** | Auth bypass, token theft, RBAC bypass | argon2id, HMAC tokens, RBAC, TOTP/OIDC (M7) |
@@ -488,6 +524,7 @@ Heimdallr is a DNS server — every UDP packet is untrusted, every TCP/TLS/QUIC 
 | Cache | serve stale, prefetch, persistent | ✅ M1/M6 |
 | DNSSEC | RSA/ECDSA/EdDSA, NSEC+NSEC3 | ✅ M3 via ring + botan |
 | Encrypted | DoT/DoH/DoQ, PROXY v1/v2 | ✅ M4 |
+| QNAME min | opt-in (always on by default) | ✅ **M5.4** opt-in (`enable=false` default) |
 | Records | DANE, SVCB/HTTPS, URI, SSHFP, DNAME, ANAME, APP | M5 |
 | Zones | Primary/Secondary/Stub/CondFwd + catalog, AXFR/IXFR/NOTIFY | ✅ M2 / M9 |
 | Filter | AdvancedBlocking, DnsBlockList, BlockPage | M6 |
@@ -506,6 +543,7 @@ Heimdallr is a DNS server — every UDP packet is untrusted, every TCP/TLS/QUIC 
 ## Performance
 
 | Metric | Value | Test |
+|
 |--------|-------|------|
 | Cache lookup (hit) | <105 ns | criterion, 100 measurements |
 | Cache lookup (miss) | <5 ns | criterion |
@@ -534,13 +572,13 @@ Heimdallr is a DNS server — every UDP packet is untrusted, every TCP/TLS/QUIC 
 | GPL-3.0 hides hosted mods | Forks can run unpublished | OSL-3.0 — hosted keeps copyleft |
 | C# crypto hides agility | Adding GOST/EdDSA = core rebuild | ring + botan-crypto trait |
 | Query Logs PostgreSQL split | sqlite/mysql/mssql/pgsql fan-out | sqlite default + single PG exporter |
-| Monolithic WebServiceApi | dashboard+zones+logs+settings in one file | axum routed modules |
+| Monolithic WebServiceApi | dashboard+zones/Logs/settings in one file | axum routed modules |
 | ANAME/APP proprietary | No import story | M5 ANAME + M9 import |
 
 ### Tuning defaults
 
 - Cache: serve-stale on, prefetch=2
-- QNAME minimization on, 0x20 off (middlebox compat)
+- QNAME minimization off by default (opt-in via M5.4 — `enable=true` to activate); 0x20 off (middlebox compat)
 - Forwarders: concurrency 2, timeout 2s
 - Observability: query.log json + Prometheus (M6)
 
@@ -556,6 +594,9 @@ cargo test
 cargo test -- --nocapture
 RUST_LOG=debug cargo test core::cache --nocapture
 
+# QNAME minimization unit tests (M5.4)
+cargo test --bin heimdallr qname_min
+
 # Property & fuzz
 cargo fuzz run dns_parse -- -max_total_time=60
 
@@ -564,6 +605,9 @@ cargo test --test integration -- --ignored
 
 # DNSSEC validation gate
 ./tests/dnssec-validate.sh
+
+# QNAME minimization gate (M5.4)
+RUST_LOG=heimdallr=debug ./tests/qname-min-validate.sh
 ```
 
 ### CI quality gates (must all pass)

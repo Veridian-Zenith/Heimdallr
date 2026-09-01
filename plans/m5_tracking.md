@@ -1,7 +1,7 @@
 # M5 — Tracking Addendum
 
 > Living tracker for the M5 scaffold + implementation work. Created as
-> PR 0 of the M5 milestone. Last touched: 2026-09-01.
+> PR 0 of the M5 milestone. Last touched: 2026-09-01 (M5.4 landed).
 
 ## Scaffold state
 
@@ -13,7 +13,7 @@
 | Sub-task issue template | [`.github/ISSUE_TEMPLATE/m5-subtask.yml`](../.github/ISSUE_TEMPLATE/m5-subtask.yml) |
 | Meta-tracking issue template | [`.github/ISSUE_TEMPLATE/m5-meta.md`](../.github/ISSUE_TEMPLATE/m5-meta.md) |
 | Template config | [`.github/ISSUE_TEMPLATE/config.yml`](../.github/ISSUE_TEMPLATE/config.yml) (`blank_issues_enabled: false`) |
-| First sub-task to open | **M5.4 — QNAME minimization (RFC 9156)** — per design doc §5 PR order |
+| First sub-task to open | **M5.1 — SVCB / HTTPS** (M5.4 landed on `main`) |
 | Target tag | `v0.5.0-alpha` (after all 8 success gates pass; see design doc §1) |
 
 ## Commit log for M5 scaffold
@@ -34,7 +34,6 @@ squash-merge once the gate closes:
 | PR | ID | Sub-task | Issue template | Branch suggestion |
 |----|----|----------|----------------|-------------------|
 | 0 | — | Scaffold (this) | — | (committed directly to `main`) |
-| 1 | M5.4 | QNAME minimization | `m5-subtask.yml` (id=M5.4) | `feat/m5-qmin` |
 | 2 | M5.1 | SVCB / HTTPS | `m5-subtask.yml` (id=M5.1) | `feat/m5-svcb` |
 | 3 | M5.2 | SSHFP | `m5-subtask.yml` (id=M5.2) | `feat/m5-sshfp` |
 | 4 | M5.5 | CNAME cloaking | `m5-subtask.yml` (id=M5.5) | `feat/m5-cname-cloak` |
@@ -42,15 +41,21 @@ squash-merge once the gate closes:
 | 6 | M5.7 | ECS | `m5-subtask.yml` (id=M5.7) | `feat/m5-ecs` |
 | 7 | M5.6 | DNS64 | `m5-subtask.yml` (id=M5.6) | `feat/m5-dns64` |
 
+## Landed
+
+| PR | ID | Sub-task | Commit | CI run | Notes |
+|----|----|----------|--------|--------|-------|
+| 1 | M5.4 | QNAME minimization (RFC 9156) | [`47569fe`](https://github.com/Veridian-Zenith/Heimdallr/commit/47569fe) on `main` | [run 33571400992](https://github.com/Veridian-Zenith/Heimdallr/actions/runs/33571400992) ✅ | opt-in (`enable=false` default); 10 unit tests; `tests/qname-min-validate.sh`; clippy/fmt/audit/deny clean. Driver in `src/core/resolver/qname_min.rs`; wiring in `src/core/resolver/forward.rs`. |
+
 ## Opening the first sub-task issue
 
 1. Use the **M5 Sub-task** template on GitHub (`.github/ISSUE_TEMPLATE/m5-subtask.yml`).
-2. Set `subtask_id` = **M5.4 — QNAME minimization (RFC 9156)**.
-3. Fill `rfc` = `9156`.
-4. Fill `files` = `src/core/resolver/forward.rs`, `src/core/resolver/qmin.rs (new)`, `src/core/rec/mod.rs`.
-5. Fill `gate` = `Gate #5`.
-6. Reference design-doc sections in `notes` (RFC 9156 §2/§3, design doc §3 M5.4 block).
-7. Apply the meta-issue checklist update in `.github/ISSUE_TEMPLATE/m5-meta.md` for the M5.4 row.
+2. Set `subtask_id` = **M5.1 — SVCB / HTTPS**.
+3. Fill `rfc` = `9460`.
+4. Fill `files` = `src/core/zone/record.rs`, `src/core/rec/mod.rs`.
+5. Fill `gate` = `Gate #4`.
+6. Reference design-doc sections in `notes` (RFC 9460 §2, design doc §3 M5.1 block).
+7. Apply the meta-issue checklist update in `.github/ISSUE_TEMPLATE/m5-meta.md` for the M5.1 row.
 
 ## Notes / deviations from this scaffold
 
