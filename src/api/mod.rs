@@ -10,9 +10,15 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use hyper_util::rt::TokioIo;
+use rustls_pki_types::pem::PemObject;
+use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 use serde::Serialize;
+use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio::net::TcpListener;
 use tokio::sync::RwLock;
+use tokio_rustls::TlsAcceptor;
 use tracing::info;
 
 use crate::config::Config;
@@ -246,9 +252,7 @@ async fn find_zone(
 
 pub struct Api {
     pub listen: String,
-    #[allow(dead_code)]
     pub tls_cert: Option<String>,
-    #[allow(dead_code)]
     pub tls_key: Option<String>,
     pub state: Arc<ApiState>,
 }
@@ -285,7 +289,6 @@ impl Api {
             .route("/api/info", get(server_info))
             .route("/api/zones", get(list_zones))
             .route("/api/zones/{name}", get(zone_detail))
-            // M3: Record management for DANE TLSA + all record types
             .route(
                 "/api/zones/{name}/records",
                 get(list_records).post(create_record),
@@ -295,18 +298,78 @@ impl Api {
             .route("/api/zones/{name}/records/delete", post(delete_record))
             .with_state(self.state);
 
-        // TODO M4: TLS support via axum-server + rustls when cert+key are configured
-        if self.tls_cert.is_some() || self.tls_key.is_some() {
-            info!(
-                "api: TLS cert/key configured but TLS listener not yet implemented (M4) — serving plain HTTP"
-            );
-        }
+        if let (Some(cert_path), Some(key_path)) = (&self.tls_cert, &self.tls_key) {
+            let certs = CertificateDer::pem_file_iter(cert_path)
+                .map_err(|e| anyhow::anyhow!("api TLS: read certs {cert_path}: {e}"))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| anyhow::anyhow!("api TLS: parse certs {cert_path}: {e}"))?;
 
-        let listener = tokio::net::TcpListener::bind(&self.listen).await?;
-        info!("api: listening on {}", self.listen);
-        axum::serve(listener, app.into_make_service())
-            .with_graceful_shutdown(shutdown_signal())
-            .await?;
+            let key = PrivateKeyDer::pem_file_iter(key_path)
+                .map_err(|e| anyhow::anyhow!("api TLS: read key {key_path}: {e}"))?
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("api TLS: no private key in {key_path}"))?
+                .map_err(|e| anyhow::anyhow!("api TLS: parse key {key_path}: {e}"))?;
+
+            let mut tls_config = rustls::ServerConfig::builder_with_provider(Arc::new(
+                rustls::crypto::ring::default_provider(),
+            ))
+            .with_safe_default_protocol_versions()
+            .map_err(|e| anyhow::anyhow!("api TLS: protocol config: {e}"))?
+            .with_no_client_auth()
+            .with_single_cert(certs, key)
+            .map_err(|e| anyhow::anyhow!("api TLS: certificate: {e}"))?;
+
+            tls_config.alpn_protocols = vec![b"http/1.1".to_vec()];
+
+            let acceptor = TlsAcceptor::from(Arc::new(tls_config));
+            let addr: SocketAddr = self
+                .listen
+                .parse()
+                .map_err(|e| anyhow::anyhow!("bad api listen addr '{}': {e}", self.listen))?;
+
+            let tcp = TcpListener::bind(addr).await?;
+            info!("api: TLS listening on {addr}");
+
+            use tower::Service;
+
+            loop {
+                let (stream, _peer) = tokio::select! {
+                    result = tcp.accept() => result?,
+                    _ = shutdown_signal() => break,
+                };
+
+                let acceptor = acceptor.clone();
+                let mut make_svc = app.clone().into_make_service();
+
+                tokio::spawn(async move {
+                    match acceptor.accept(stream).await {
+                        Ok(tls_stream) => {
+                            let svc = make_svc
+                                .call(())
+                                .await
+                                .expect("make service should not fail");
+                            let hyper_conn = TokioIo::new(tls_stream);
+                            let hyper_svc = hyper_util::service::TowerToHyperService::new(svc);
+                            if let Err(e) = hyper::server::conn::http1::Builder::new()
+                                .serve_connection(hyper_conn, hyper_svc)
+                                .await
+                            {
+                                tracing::debug!("api TLS: connection error: {e}");
+                            }
+                        }
+                        Err(e) => {
+                            tracing::debug!("api TLS: handshake failed: {e}");
+                        }
+                    }
+                });
+            }
+        } else {
+            let listener = tokio::net::TcpListener::bind(&self.listen).await?;
+            info!("api: listening on {}", self.listen);
+            axum::serve(listener, app.into_make_service())
+                .with_graceful_shutdown(shutdown_signal())
+                .await?;
+        }
 
         Ok(())
     }

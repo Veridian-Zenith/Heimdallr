@@ -20,7 +20,8 @@ hickory-server = { version = "0.26.1", features = ["dnssec-ring", "resolver", "t
 hickory-net = "0.26.1"
 quinn = { version = "0.11", features = ["ring"], default-features = false }
 rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"] }
-rustls-pki-types = "1"
+rustls-pki-types = { version = "1", features = ["std"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
 hex = "0.4"
 ring = "0.17"
 rcgen = { version = "0.14", features = ["ring"] }
@@ -34,6 +35,9 @@ clap = { version = "4", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 axum = { version = "0.8", features = ["json"] }
+hyper = "1"
+hyper-util = { version = "0.1", features = ["tokio", "server-auto", "service"] }
+tower = "0.5"
 async-trait = "0.1"
 
 [dev-dependencies]

@@ -454,10 +454,8 @@ mod tests {
                 6 => {
                     cache.reap_expired();
                 }
-                7 => {
-                    if i % 500 == 0 {
-                        cache.clear();
-                    }
+                7 if i % 500 == 0 => {
+                    cache.clear();
                 }
                 _ => {}
             }

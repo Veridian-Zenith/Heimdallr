@@ -21,7 +21,7 @@ From-zero Rust DNS server built to replace [Technitium DNS Server](https://techn
 |---|---|
 | **Binary** | `heimdallr` (single static binary, Linux) |
 | **License** | `OSL-3.0` — network use counts as distribution |
-| **Status** | `0.4.0-alpha` — M0 ✅ M1 ✅ M2 ✅ M3 ✅ M4 in progress |
+| **Status** | `0.4.0-alpha` — M0 ✅ M1 ✅ M2 ✅ M3 ✅ M4 ✅ |
 
 ---
 
@@ -92,20 +92,18 @@ src/
   main.rs       CLI (clap) + tracing init
   net/
     udp.rs      tokio::net::UdpSocket + recvmmsg batching
-    tcp.rs      length-prefixed framing, pipelined answers (RFC 7766 §6.2)
-    tls.rs      rustls (ring) DoT RFC 7858
-    quic.rs     quinn (ring) DoQ RFC 9250
-    doh.rs      hickory h2 DoH RFC 8484
-    proxy.rs    PROXY protocol v1/v2
-    cert.rs     TLS certificate loading
+    tcp.rs      PROXY-aware TCP DNS (RFC 7766 §6.2) + pipelined answers
+    proxy.rs    PROXY protocol v1/v2 parser
+    cert.rs     TLS certificate loading + self-signed generation
     handler.rs  HeimdallrHandler — wraps Catalog with NOTIFY interception
+    mod.rs      hickory-server listeners (UDP/TCP/DoT/DoH/DoQ) + PROXY TCP spawn
   core/
     resolver.rs hickory-resolver wrapper with DNSSEC validation
     cache/      LRU + TTL, serve-stale, prefetch
     zone/       primary/secondary/catalog, AXFR/IXFR/NOTIFY, record CRUD
     dnssec/     validation (ring) + signing + key management (botan optional)
     filter/     blocklists (regex, per-client), CNAME cloaking (M6)
-  api/          Axum :5380 — health, zones, records, TLSA CRUD
+  api/          Axum :5380 — health, zones, records, TLSA CRUD, API TLS (rustls)
   dhcp/         DHCPv4/v6 pools (M8)
   cluster/      control plane (M8)
   apps/         WASM-sandboxed DnsApp trait (future)
@@ -134,18 +132,18 @@ Milestones are gates — do not start `M(n+1)` before `M(n)` passes. Linux-only;
 | **M1** UDP/TCP Recursive + Cache | `hickory-resolver`, `CacheForwardAuthority` LRU+TTL, EDNS(0), extended errors, serve-stale, prefetch | ✅ |
 | **M2** Authoritative Zones + Transfers | Primary/Secondary zones, AXFR serving + client, NOTIFY handler, catalog zones RFC 9432, API `/api/zones` | ✅ |
 | **M3** DNSSEC Validation & Signing | Validation via `TrustAnchors`, ECDSA/Ed25519 key generation, zone signing (`RRSIG`/`DNSKEY`/`NSEC`/`NSEC3`), DANE TLSA CRUD, NSEC3 config | ✅ |
+| **M4** Encrypted Transports | DoT RFC 7858 (`rustls:ring`), DoH RFC 8484 (`h2`), DoQ RFC 9250 (`quinn:ring`), PROXY protocol v1/v2, forwarder routing over DoT/DoH/DoQ, API TLS | ✅ |
 
 ### In progress
 
 | Milestone | Scope | Gate |
 |-----------|-------|------|
-| **M4** Encrypted Transports | DoT RFC 7858 (`rustls:ring`), DoH RFC 8484 (`h2`), DoQ RFC 9250 (`quinn:ring`), PROXY protocol v1/v2, forwarder routing over DoT/DoH/DoQ | `kdig +tls`, `curl --doh-url`, `quic` client all resolve; no cleartext in Wireshark |
+| **M5** Advanced Records & Behaviors | SVCB/HTTPS, URI, SSHFP, DNAME, ANAME (apex CNAME flattening), QNAME minimization RFC 9156, case randomization, CNAME cloaking, DANE hash auto-gen, DNS64, EDNS Client Subnet | |
 
 ### Planned
 
 | Milestone | Scope |
 |-----------|-------|
-| **M5** Advanced Records & Behaviors | SVCB/HTTPS, URI, SSHFP, DNAME, ANAME (apex CNAME flattening), QNAME minimization RFC 9156, case randomization, CNAME cloaking, DANE hash auto-gen, DNS64, EDNS Client Subnet |
 | **M6** Filtering, Apps & Observability | Blocklist URLs, regex per-client, DnsBlockList, BlockPage sinkhole, DNS Rebinding Protection, persistent cache, stats + query logs, Prometheus metrics, full HTTP API |
 | **M7** Administration & Hardening | Web console (axum + static files, dark mode), multi-user RBAC + API tokens, TOTP 2FA, OIDC SSO, system logging, split-horizon/geo via Apps |
 | **M8** Auxiliary Services | Built-in DHCP server, HTTP/SOCKS5 proxy routing (incl. Tor), clustering, Docker, systemd |
@@ -420,10 +418,11 @@ cargo audit
 
 | RFC | Title | Status |
 |-----|-------|--------|
-| 7858 | DoT | M4 — `rustls:ring` |
-| 8484 | DoH | M4 — `hickory h2` |
-| 9250 | DoQ | M4 — `quinn:ring` |
-| — | PROXY protocol v1/v2 | M4 |
+| 7858 | DoT | ✅ M4 — `rustls:ring` |
+| 8484 | DoH | ✅ M4 — `hickory h2` |
+| 9250 | DoQ | ✅ M4 — `quinn:ring` |
+| — | PROXY protocol v1/v2 | ✅ M4 |
+| — | API TLS | ✅ M4 — `tokio-rustls:ring` |
 
 ### Zones & transfers
 
@@ -488,7 +487,7 @@ Heimdallr is a DNS server — every UDP packet is untrusted, every TCP/TLS/QUIC 
 | Crypto | C# crypto provider | ring + botan (no OpenSSL) |
 | Cache | serve stale, prefetch, persistent | ✅ M1/M6 |
 | DNSSEC | RSA/ECDSA/EdDSA, NSEC+NSEC3 | ✅ M3 via ring + botan |
-| Encrypted | DoT/DoH/DoQ, PROXY v1/v2 | M4 |
+| Encrypted | DoT/DoH/DoQ, PROXY v1/v2 | ✅ M4 |
 | Records | DANE, SVCB/HTTPS, URI, SSHFP, DNAME, ANAME, APP | M5 |
 | Zones | Primary/Secondary/Stub/CondFwd + catalog, AXFR/IXFR/NOTIFY | ✅ M2 / M9 |
 | Filter | AdvancedBlocking, DnsBlockList, BlockPage | M6 |
@@ -509,6 +508,10 @@ Heimdallr is a DNS server — every UDP packet is untrusted, every TCP/TLS/QUIC 
 | Metric | Value | Test |
 |--------|-------|------|
 | Cache lookup (hit) | <105 ns | criterion, 100 measurements |
+| Cache lookup (miss) | <5 ns | criterion |
+| Cache insert (256B) | <120 ns | criterion |
+| PROXY v1 TCP4 parse | <50 ns | criterion |
+| PROXY v2 TCP4 parse | <40 ns | criterion |
 
 > Benchmarks in `benches/cache_bench.rs`. Target: >60k qps cached on i7-8700 class (M9).
 
@@ -585,7 +588,7 @@ Rules are short — Heimdallr is DNS, not a web toy.
 - One idea per PR.
 - `rustfmt` default — do not debate.
 - Comments only where code cannot speak. Short sentences, ASCII.
-- No new dependency without an issue. List is intentionally tiny — `tokio`, `hickory-*`, `quinn`+`rustls` (`ring`), `botan`, `axum`, `anyhow`, `clap`, `tracing`. Adding `openssl`/`boring`/`aws-lc` requires RFC-style justification.
+- No new dependency without an issue. List is intentionally tiny — `tokio`, `hickory-*`, `quinn`+`rustls` (`ring`), `botan`, `axum`, `hyper`, `hyper-util`, `tower`, `tokio-rustls`, `anyhow`, `clap`, `tracing`. Adding `openssl`/`boring`/`aws-lc` requires RFC-style justification.
 - Commit messages: imperative (`Add QNAME minimization`), not `added`.
 
 ### Bugs & security

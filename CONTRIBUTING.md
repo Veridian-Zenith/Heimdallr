@@ -26,7 +26,7 @@ If you touch boot/service behavior, paste `systemctl status heimdallr` and `jour
 
 - `rustfmt` default — do not debate.
 - Comments only where code cannot speak. Short sentences, ASCII.
-- No new dependency without an issue. List is intentionally tiny — `tokio`, `hickory-*`, `quinn`+`rustls` (`ring`), `axum`, `anyhow`/`thiserror`, `clap`, `tracing`. Adding `openssl`/`boring`/`aws-lc` requires RFC-style justification and is rejected for default builds.
+- No new dependency without an issue. List is intentionally tiny — `tokio`, `hickory-*`, `quinn`+`rustls` (`ring`), `axum`, `hyper`/`hyper-util`/`tower`/`tokio-rustls` (API TLS), `anyhow`/`thiserror`, `clap`, `tracing`. Adding `openssl`/`boring`/`aws-lc` requires RFC-style justification and is rejected for default builds.
 - Commit messages: imperative (`Add QNAME minimization`), not `added`.
 
 ## Reporting

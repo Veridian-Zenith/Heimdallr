@@ -2,12 +2,9 @@
 // Copyright (c) 2026 Veridian Zenith
 
 pub mod cert;
-pub mod doh;
 pub mod handler;
 pub mod proxy;
-pub mod quic;
 pub mod tcp;
-pub mod tls;
 pub mod udp;
 
 use anyhow::Result;
@@ -22,7 +19,7 @@ use crate::core::cache::{CacheConfig, SharedCache, new_shared_cache};
 use crate::core::resolver::ResolverWrap;
 use crate::core::resolver::forward::CacheForwardAuthority;
 use crate::core::zone::ZoneManager;
-use crate::net::handler::HeimdallrHandler;
+use crate::net::handler::{HeimdallrHandler, SharedHandler};
 use hickory_server::proto::rr::{LowerName, Name};
 use hickory_server::server::Server;
 use hickory_server::zone_handler::ZoneHandler;
@@ -56,8 +53,8 @@ impl Net {
         let cache = new_shared_cache(cache_cfg);
 
         let (catalog, secondaries) = self.build_catalog(cache)?;
-        let handler = HeimdallrHandler::new(catalog, secondaries);
-        let mut server = Server::new(handler);
+        let handler = SharedHandler::new(HeimdallrHandler::new(catalog, secondaries));
+        let mut server = Server::new(handler.clone());
 
         // Register UDP listeners
         for addr in &self.cfg.listen {
@@ -72,15 +69,39 @@ impl Net {
         }
 
         // Register TCP listeners (M1 — RFC 7766)
-        for addr in &self.cfg.listen {
-            let sock_addr: SocketAddr = addr
-                .parse()
-                .map_err(|e| anyhow::anyhow!("bad listen addr '{addr}': {e}"))?;
-            let tcp_listener = tokio::net::TcpListener::bind(sock_addr)
-                .await
-                .map_err(|e| anyhow::anyhow!("bind tcp {sock_addr}: {e}"))?;
-            debug!("tcp listening on {sock_addr}");
-            server.register_listener(tcp_listener, Duration::from_secs(5), 4096);
+        //
+        // When proxy protocol is enabled, TCP is handled by our own listener
+        // that strips the PROXY header before processing DNS. When disabled,
+        // hickory-server handles TCP natively.
+        if self.cfg.proxy.enable {
+            for addr in &self.cfg.listen {
+                let sock_addr: SocketAddr = addr
+                    .parse()
+                    .map_err(|e| anyhow::anyhow!("bad listen addr '{addr}': {e}"))?;
+                let tcp_listener = tokio::net::TcpListener::bind(sock_addr)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("bind tcp {sock_addr}: {e}"))?;
+                let handler = handler.clone();
+                let proxy_allow = self.cfg.proxy.allow.clone();
+                tokio::spawn(async move {
+                    if let Err(e) =
+                        tcp::run_tcp_listener(tcp_listener, handler, true, &proxy_allow).await
+                    {
+                        tracing::error!("tcp proxy listener failed: {e}");
+                    }
+                });
+            }
+        } else {
+            for addr in &self.cfg.listen {
+                let sock_addr: SocketAddr = addr
+                    .parse()
+                    .map_err(|e| anyhow::anyhow!("bad listen addr '{addr}': {e}"))?;
+                let tcp_listener = tokio::net::TcpListener::bind(sock_addr)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("bind tcp {sock_addr}: {e}"))?;
+                debug!("tcp listening on {sock_addr}");
+                server.register_listener(tcp_listener, Duration::from_secs(5), 4096);
+            }
         }
 
         // M4: Load TLS cert once for all encrypted listeners (DoT/DoH/DoQ).
@@ -192,11 +213,9 @@ impl Net {
         hickory_server::zone_handler::Catalog,
         Vec<handler::SecondaryZoneInfo>,
     )> {
-        // Load authoritative zones
         let zone_manager = ZoneManager::new(self.cfg.clone());
         let (mut catalog, secondaries) = zone_manager.load_all()?;
 
-        // Add catch-all cache-aware forwarder for recursive resolution
         let forwarder = self.build_cache_forwarder(cache)?;
         catalog.upsert(
             LowerName::from(Name::root()),
@@ -206,7 +225,6 @@ impl Net {
         Ok((catalog, secondaries))
     }
 
-    /// Build a `CacheForwardAuthority` — hickory-resolver + Heimdallr cache.
     fn build_cache_forwarder(&self, cache: SharedCache) -> Result<CacheForwardAuthority> {
         let dnssec_enabled = self.cfg.dnssec.validation;
         let resolver_wrap = ResolverWrap::from_config(&self.cfg.resolver, dnssec_enabled)?;

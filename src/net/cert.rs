@@ -158,3 +158,54 @@ pub fn generate_self_signed(host: &str, keys_dir: &str) -> Result<(String, Strin
         key_path.to_str().unwrap().to_string(),
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn self_signed_roundtrip() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (cert_path, key_path) =
+            generate_self_signed("test.localhost", tmp.path().to_str().unwrap()).unwrap();
+
+        assert!(std::path::Path::new(&cert_path).exists());
+        assert!(std::path::Path::new(&key_path).exists());
+
+        let resolver = load_tls_cert(&cert_path, &key_path).unwrap();
+
+        let cert_pem = std::fs::read_to_string(&cert_path).unwrap();
+        assert!(cert_pem.contains("BEGIN CERTIFICATE"));
+
+        let key_pem = std::fs::read_to_string(&key_path).unwrap();
+        assert!(key_pem.contains("BEGIN PRIVATE KEY"));
+
+        drop(resolver);
+    }
+
+    #[test]
+    fn self_signed_idempotent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().to_str().unwrap();
+        let (c1, k1) = generate_self_signed("idem.localhost", dir).unwrap();
+        let (c2, k2) = generate_self_signed("idem.localhost", dir).unwrap();
+        assert_eq!(c1, c2);
+        assert_eq!(k1, k2);
+    }
+
+    #[test]
+    fn load_cert_missing_file() {
+        assert!(load_tls_cert("/nonexistent/cert.pem", "/nonexistent/key.pem").is_err());
+    }
+
+    #[test]
+    fn auto_detect_missing() {
+        assert!(auto_detect_cert_paths("nohost.local", "/tmp/nonexistent").is_none());
+    }
+
+    #[test]
+    fn resolve_cert_explicit() {
+        let result = resolve_cert_paths(Some("/c.pem"), Some("/k.pem"), "host.local", "/tmp/le");
+        assert_eq!(result.unwrap(), ("/c.pem".into(), "/k.pem".into()));
+    }
+}

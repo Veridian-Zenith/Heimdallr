@@ -7,12 +7,16 @@
 //! but returns `NotImp` for `OpCode::Notify`. This handler intercepts NOTIFY
 //! messages, triggers zone re-AXFR from primaries, and delegates everything
 //! else to the inner `Catalog`.
+//!
+//! The handler is wrapped in `Arc` for sharing between hickory-server's
+//! internal listeners (UDP/TLS/DoH/DoQ) and our custom PROXY-aware TCP listener.
 
 use async_trait::async_trait;
 use hickory_server::proto::op::{Header, Message, MessageType, Metadata, OpCode, ResponseCode};
 use hickory_server::proto::serialize::binary::BinDecodable;
 use hickory_server::server::{Request, RequestHandler, ResponseHandler, ResponseInfo};
 use hickory_server::zone_handler::{Catalog, MessageResponseBuilder};
+use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
 /// Zone config needed for NOTIFY-triggered re-AXFR.
@@ -23,6 +27,8 @@ pub struct SecondaryZoneInfo {
 }
 
 /// A `RequestHandler` that wraps hickory's `Catalog` and adds NOTIFY handling.
+///
+/// Not `Clone` — use `Arc<HeimdallrHandler>` for sharing.
 pub struct HeimdallrHandler {
     catalog: Catalog,
     secondaries: Vec<SecondaryZoneInfo>,
@@ -37,9 +43,6 @@ impl HeimdallrHandler {
     }
 
     /// Handle an incoming NOTIFY (`OpCode::Notify`).
-    ///
-    /// Per RFC 1996, a NOTIFY contains the zone name in the query section and
-    /// optionally the current SOA serial in the answer section.
     async fn handle_notify<R: ResponseHandler>(
         &self,
         request: &Request,
@@ -56,7 +59,6 @@ impl HeimdallrHandler {
 
         let zone_name = query.name().to_utf8();
 
-        // Parse the full message to extract SOA serial from answers
         let serial = if let Ok(msg) = Message::from_bytes(request.as_slice()) {
             msg.answers
                 .iter()
@@ -75,7 +77,6 @@ impl HeimdallrHandler {
 
         info!("notify: received for {zone_name} serial={serial}");
 
-        // Find matching secondary zone config
         let matching = self
             .secondaries
             .iter()
@@ -103,7 +104,6 @@ impl HeimdallrHandler {
             debug!("notify: no secondary zone config for {zone_name}, ignoring");
         }
 
-        // Acknowledge the NOTIFY
         Self::send_notify_ack(request, &mut response_handle).await
     }
 
@@ -154,21 +154,57 @@ impl HeimdallrHandler {
     }
 }
 
+/// Shared handler — wraps `Arc<HeimdallrHandler>` and implements `RequestHandler`.
+///
+/// This allows sharing one handler instance between hickory-server's listeners
+/// (UDP/TLS/DoH/DoQ) and our custom PROXY-aware TCP listener.
+#[derive(Clone)]
+pub struct SharedHandler(pub Arc<HeimdallrHandler>);
+
+impl SharedHandler {
+    pub fn new(handler: HeimdallrHandler) -> Self {
+        Self(Arc::new(handler))
+    }
+}
+
 #[async_trait]
-impl RequestHandler for HeimdallrHandler {
+impl RequestHandler for SharedHandler {
     async fn handle_request<R: ResponseHandler, T: hickory_server::net::runtime::Time>(
         &self,
         request: &Request,
         response_handle: R,
     ) -> ResponseInfo {
-        // Intercept NOTIFY before delegating to Catalog
         if request.metadata.op_code == OpCode::Notify {
-            return self.handle_notify(request, response_handle).await;
+            return self.0.handle_notify(request, response_handle).await;
         }
 
-        // Delegate everything else to the inner Catalog
-        self.catalog
+        self.0
+            .catalog
             .handle_request::<_, T>(request, response_handle)
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hickory_server::zone_handler::Catalog;
+
+    #[test]
+    fn shared_handler_new_and_clone() {
+        let catalog = Catalog::default();
+        let handler = SharedHandler::new(HeimdallrHandler::new(catalog, vec![]));
+        let handler2 = handler.clone();
+        assert!(std::ptr::eq(
+            Arc::as_ptr(&handler.0),
+            Arc::as_ptr(&handler2.0)
+        ));
+    }
+
+    #[test]
+    fn shared_handler_empty_secondaries() {
+        let catalog = Catalog::default();
+        let handler = SharedHandler::new(HeimdallrHandler::new(catalog, vec![]));
+        assert_eq!(handler.0.secondaries.len(), 0);
     }
 }
