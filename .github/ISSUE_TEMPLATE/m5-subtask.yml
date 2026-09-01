@@ -1,0 +1,102 @@
+name: M5 Sub-task
+description: Track a single Heimdallr M5 sub-task (M5.1–M5.7). See plans/m5_design.md for the full design.
+title: "[M5.x] "
+labels: ["milestone:m5"]
+
+body:
+  - type: dropdown
+    id: subtask_id
+    attributes:
+      label: M5 sub-task ID
+      description: The sub-task this issue tracks. Drives PR ordering — see plans/m5_design.md §5.
+      options:
+        - M5.1 — SVCB / HTTPS (RFC 9460/9461/9462)
+        - M5.2 — SSHFP (RFC 4255)
+        - M5.3 — DNAME / ANAME (RFC 6676 + draft-aname)
+        - M5.4 — QNAME minimization (RFC 9156)
+        - M5.5 — CNAME cloaking (vendor-specific)
+        - M5.6 — DNS64 (RFC 6147)
+        - M5.7 — ECS (RFC 7871)
+    validations:
+      required: true
+
+  - type: input
+    id: rfc
+    attributes:
+      label: Primary RFC
+      description: Comma-separated RFC numbers / draft names relevant to this sub-task. Leave blank if vendor-specific.
+      placeholder: "e.g. 9156, draft-ietf-dnsop-aname-04"
+    validations:
+      required: false
+
+  - type: textarea
+    id: files
+    attributes:
+      label: File targets
+      description: Source files expected to change in this sub-task.
+      placeholder: |
+        e.g.
+        - src/core/resolver/forward.rs
+        - src/core/rec/mod.rs
+        - tests/m5-qmin-validate.sh
+    validations:
+      required: true
+
+  - type: input
+    id: pr_number
+    attributes:
+      label: PR number
+      description: PR number once opened against feat/m5. Leave blank until PR exists.
+      placeholder: "#42"
+    validations:
+      required: false
+
+  - type: input
+    id: depends_on
+    attributes:
+      label: Depends on
+      description: Issue ID this sub-task is blocked by (if any). Per plans/m5_design.md §2 / §5.
+      placeholder: "e.g. #5"
+    validations:
+      required: false
+
+  - type: input
+    id: gate
+    attributes:
+      label: Success-gate link
+      description: Row number in plans/m5_design.md §1 "Success criteria" this sub-task closes.
+      placeholder: "Gate #N"
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        ## Sub-task checklist
+        Derived from plans/m5_design.md §3 ("Test strategy" / "Edge cases") and §1 ("Success criteria").
+        Tick items as they close; link the relevant commit or test name in the PR description.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Implementation checklist
+      description: Five items derived from this sub-task's test strategy + edge cases in the design doc.
+      options:
+        - label: Read the "Reference RFC sections" block in plans/m5_design.md §3 before coding
+          required: false
+        - label: Parser / rdata arms added and round-trip unit tests pass (`cargo test` clean)
+          required: false
+        - label: Integration shell test (e.g. tests/m5-*-validate.sh) written and run end-to-end
+          required: false
+        - label: All "Edge cases / known pitfalls" from the design doc §3 sub-task block exercised by tests
+          required: false
+        - label: DNSSEC interaction (per design doc §4) verified for any record or response synthesis this PR introduces
+          required: false
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes / risks
+      description: Free-form notes. Reference risk register entries (R1–R7) from plans/m5_design.md §6 if applicable.
+    validations:
+      required: false

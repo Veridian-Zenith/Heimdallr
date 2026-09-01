@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Heimdallr M5 design
+    url: https://github.com/Veridian-Zenith/Heimdallr/blob/feat/m5/plans/m5_design.md
+    about: Authoritative M5 design doc — sub-tasks, file targets, risk register, success gates.
+  - name: Contributing guide
+    url: https://github.com/Veridian-Zenith/Heimdallr/blob/main/CONTRIBUTING.md
+    about: Coding standards, review process, and commit message conventions for Heimdallr.
