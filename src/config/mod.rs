@@ -296,7 +296,7 @@ fn default_log_level() -> String {
     "info".into()
 }
 fn default_log_format() -> String {
-    "json".into()
+    "text".into()
 }
 impl Default for LogConfig {
     fn default() -> Self {

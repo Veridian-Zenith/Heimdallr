@@ -46,15 +46,21 @@ async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let cfg = load_config(&args)?;
 
-    // Initialize tracing with config log level. RUST_LOG overrides if set.
-    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(&cfg.log.level));
+    // Log level: --log-level flag > RUST_LOG env > config log.level > "info"
+    let log_level = args.log_level.as_deref().unwrap_or(&cfg.log.level);
 
-    tracing_subscriber::fmt()
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(log_level));
+
+    let fmt = tracing_subscriber::fmt()
         .with_env_filter(env_filter)
-        .with_target(true)
-        .with_thread_ids(false)
-        .init();
+        .with_target(true);
+
+    // Format: "text" for human-readable, "json" for structured/journald
+    match cfg.log.format.as_str() {
+        "json" => fmt.json().init(),
+        _ => fmt.init(),
+    }
 
     if args.check_config {
         println!(
