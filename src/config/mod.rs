@@ -70,8 +70,8 @@ pub struct ResolverConfig {
     pub forwarders: Vec<String>,
     #[serde(default = "default_forward_protocol")]
     pub forward_protocol: String,
-    #[serde(default = "default_true")]
-    pub qname_minimization: bool,
+    #[serde(default)]
+    pub qname_minimization: ResolverQnameMinimization,
     #[serde(default)]
     pub qname_randomization: bool,
     #[serde(default)]
@@ -80,6 +80,67 @@ pub struct ResolverConfig {
     pub concurrency: u8,
     #[serde(default = "default_timeout_ms")]
     pub timeout_ms: u64,
+}
+
+/// RFC 9156 — QNAME minimization configuration.
+///
+/// Minimization splits a recursive lookup into a series of queries with
+/// progressively more labels (e.g. `com.` → `example.com.` → … → original
+/// name) so the upstream server only learns the label it's authoritative
+/// for. This reduces the privacy leakage inherent in sending the full
+/// QNAME to every server in the chain.
+///
+/// `enable` is **opt-in** (defaults to `false`) to preserve existing
+/// recursive behavior until the operator has validated the behavior in
+/// their environment. Modes:
+///
+/// * [`QnameMinMode::Incremental`] — peel one label per step (most
+///   compatible; used by BIND's `qname-minimization` `relaxed` mode).
+/// * [`QnameMinMode::Aggressive`] — skip labels when the cached NS set
+///   already covers a deeper cut (fewest queries; requires glue cache).
+/// * [`QnameMinMode::Strict`] — RFC 9156 §3.3 algorithm (recommended
+///   default if minimization is enabled).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResolverQnameMinimization {
+    #[serde(default)]
+    pub enable: bool,
+    #[serde(default)]
+    pub mode: QnameMinMode,
+    #[serde(default = "default_qmin_max_iterations")]
+    pub max_iterations: u8,
+}
+
+/// QNAME minimization mode selector.
+///
+/// See [`ResolverQnameMinimization`] for semantics. Defaults to
+/// [`QnameMinMode::Strict`].
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum QnameMinMode {
+    /// 1-label-per-step probe; most compatible.
+    Incremental,
+    /// Skip if NS set already known from cache.
+    Aggressive,
+    /// RFC 9156 §3.3 algorithm.
+    #[default]
+    Strict,
+}
+
+impl Default for ResolverQnameMinimization {
+    fn default() -> Self {
+        Self {
+            enable: false,
+            mode: QnameMinMode::Strict,
+            max_iterations: default_qmin_max_iterations(),
+        }
+    }
+}
+
+fn default_qmin_max_iterations() -> u8 {
+    // RFC 9156 §3.3 sets an upper bound on the number of minimization
+    // steps equal to the number of labels in the QNAME + 1. We cap at 7
+    // to bound work for pathological inputs.
+    7
 }
 
 fn default_forwarders() -> Vec<String> {
@@ -103,7 +164,9 @@ impl Default for ResolverConfig {
         Self {
             forwarders: default_forwarders(),
             forward_protocol: default_forward_protocol(),
-            qname_minimization: true,
+            // QNAME minimization is opt-in for M5.4 — defaults to off.
+            // Operators enable explicitly via [resolver] config block.
+            qname_minimization: ResolverQnameMinimization::default(),
             qname_randomization: false,
             ecs: false,
             concurrency: default_concurrency(),
@@ -714,8 +777,14 @@ mod tests {
         assert!(cfg.filter.cname_cloaking);
         // Rebinding protection on by default
         assert!(cfg.filter.rebinding);
-        // QNAME minimization on by default
-        assert!(cfg.resolver.qname_minimization);
+        // M5.4: QNAME minimization is opt-in — disabled by default.
+        assert!(!cfg.resolver.qname_minimization.enable);
+        // Default mode is Strict (RFC 9156 §3.3).
+        assert_eq!(
+            cfg.resolver.qname_minimization.mode,
+            crate::config::QnameMinMode::Strict
+        );
+        assert!(cfg.resolver.qname_minimization.max_iterations > 0);
         // ECS off by default (privacy)
         assert!(!cfg.resolver.ecs);
         // Serve stale on by default

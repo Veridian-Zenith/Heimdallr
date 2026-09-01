@@ -24,7 +24,13 @@ zones_dir = "/etc/heimdallr/zones"
 [resolver]
 forwarders = ["9.9.9.11:53"]
 forward_protocol = "udp"
-qname_minimization = true
+# QNAME minimization (RFC 9156, M5.4) — opt-in. When enabled, the forwarder
+# issues one query per label step (com. → example.com. → … → original name)
+# instead of a single full-QNAME lookup. Modes: incremental / aggressive /
+# strict. Default mode if enabled is "strict" (RFC 9156 §3.3).
+# qname_minimization.enable = false
+# qname_minimization.mode = "strict"
+# qname_minimization.max_iterations = 7
 qname_randomization = false
 ecs = false
 concurrency = 2

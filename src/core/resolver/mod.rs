@@ -7,6 +7,7 @@
 #![allow(dead_code)]
 
 pub mod forward;
+pub mod qname_min;
 
 use anyhow::{Context, Result};
 use hickory_net::runtime::TokioRuntimeProvider;

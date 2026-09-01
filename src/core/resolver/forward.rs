@@ -25,7 +25,9 @@ use hickory_server::zone_handler::{
 
 use tracing::{debug, warn};
 
+use crate::config::ResolverQnameMinimization;
 use crate::core::cache::{CacheKey, SharedCache};
+use crate::core::resolver::qname_min;
 
 /// RFC 8914 Extended DNS Error codes we use.
 struct Ede;
@@ -59,6 +61,8 @@ pub struct CacheForwardAuthority {
     resolver: HickoryResolver<TokioRuntimeProvider>,
     cache: SharedCache,
     dnssec_enabled: bool,
+    /// M5.4: QNAME minimization config (RFC 9156, opt-in).
+    qname_minimization: ResolverQnameMinimization,
 }
 
 impl CacheForwardAuthority {
@@ -67,12 +71,14 @@ impl CacheForwardAuthority {
         resolver: HickoryResolver<TokioRuntimeProvider>,
         cache: SharedCache,
         dnssec_enabled: bool,
+        qname_minimization: ResolverQnameMinimization,
     ) -> Self {
         Self {
             origin,
             resolver,
             cache,
             dnssec_enabled,
+            qname_minimization,
         }
     }
 
@@ -255,10 +261,34 @@ impl ZoneHandler for CacheForwardAuthority {
         let mut fwd_name: Name = name.clone().into();
         fwd_name.set_fqdn(false);
 
-        let lookup = match self.resolver.lookup(fwd_name, rtype).await {
-            Ok(lookup) => lookup,
-            Err(e) => {
-                return LookupControlFlow::Continue(Err(LookupError::from(e)));
+        // M5.4: QNAME minimization (RFC 9156) — opt-in. When enabled,
+        // issue one query per label step (com. -> example.com. -> ... ->
+        // original name) instead of a single full-QNAME lookup. Falls
+        // back to a non-minimized query if every peel step errors.
+        let lookup = if self.qname_minimization.enable {
+            let min_resolver = qname_min::HickoryMinResolver::new(self.resolver.clone());
+            match qname_min::resolve_with_minimization(
+                &min_resolver,
+                fwd_name.clone(),
+                rtype,
+                &self.qname_minimization,
+            )
+            .await
+            {
+                Ok(res) => {
+                    let query = Query::query(fwd_name.clone(), rtype);
+                    hickory_resolver::lookup::Lookup::new_with_max_ttl(query, res.records)
+                }
+                Err(e) => {
+                    return LookupControlFlow::Continue(Err(LookupError::from(e)));
+                }
+            }
+        } else {
+            match self.resolver.lookup(fwd_name, rtype).await {
+                Ok(lookup) => lookup,
+                Err(e) => {
+                    return LookupControlFlow::Continue(Err(LookupError::from(e)));
+                }
             }
         };
 

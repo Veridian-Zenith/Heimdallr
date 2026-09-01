@@ -234,11 +234,14 @@ impl Net {
         info!(
             "net: cache-aware forwarder configured (recursive resolution via hickory-resolver, dnssec={dnssec_enabled})"
         );
+        // M5.4: pass QNAME-minimization config to the forwarder.
+        // Default is opt-out (enable=false) — behavior unchanged.
         Ok(CacheForwardAuthority::new(
             origin,
             resolver,
             cache,
             dnssec_enabled,
+            self.cfg.resolver.qname_minimization.clone(),
         ))
     }
 }
