@@ -45,7 +45,7 @@ jobs:
 
       - name: Audit
         run: |
-          cargo install cargo-audit --locked && cargo audit --ignore RUSTSEC-2026-0118 --ignore RUSTSEC-2026-0119 || echo "audit known hickory-proto 0.25 vulns ignored (0.26 breaking API, see ROADMAP)"
+          cargo install cargo-audit --locked && cargo audit
 
       - name: Build
         run: cargo build
