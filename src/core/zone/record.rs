@@ -246,6 +246,7 @@ fn parse_record_type(s: &str) -> Result<RecordType> {
         "SRV" => Ok(RecordType::SRV),
         "PTR" => Ok(RecordType::PTR),
         "TLSA" => Ok(RecordType::TLSA),
+        "SSHFP" => Ok(RecordType::SSHFP),
         "HTTPS" => Ok(RecordType::HTTPS),
         "SVCB" => Ok(RecordType::SVCB),
         "CAA" => Ok(RecordType::CAA),
@@ -338,6 +339,12 @@ fn parse_rdata(rtype: RecordType, data: &str) -> Result<RData> {
         RecordType::TLSA => {
             let tlsa = parse_tlsa_data(data)?;
             Ok(RData::TLSA(tlsa))
+        }
+        RecordType::SSHFP => {
+            // M5.2: RFC 4255 SSH fingerprint rdata
+            // (e.g. "2 1 123456789abcdef67890123456789abcdef67890").
+            let sshfp = super::file::parse_sshfp_data(data)?;
+            Ok(RData::SSHFP(sshfp))
         }
         RecordType::SVCB => {
             // M5.1: RFC 9460 SVCB presentation-format rdata
@@ -532,5 +539,32 @@ mod tests {
         // hickory's lexer must reject malformed priority tokens.
         let r = parse_rdata(RecordType::SVCB, "not-a-priority .");
         assert!(r.is_err(), "expected error for malformed SVCB, got {r:?}");
+    }
+
+    // M5.2 — SSHFP (RFC 4255) API insertion (presentation-format rdata)
+
+    #[test]
+    fn parse_rdata_sshfp_basic() {
+        // RFC 4255 §3.2: algorithm=2 (DSA), fingerprint_type=1 (SHA-1),
+        // 20-byte hex fingerprint.
+        let r = parse_rdata(
+            RecordType::SSHFP,
+            "2 1 123456789abcdef67890123456789abcdef67890",
+        )
+        .expect("SSHFP parses");
+        match r {
+            RData::SSHFP(sshfp) => {
+                assert_eq!(u8::from(sshfp.algorithm), 2);
+                assert_eq!(u8::from(sshfp.fingerprint_type), 1);
+                assert_eq!(sshfp.fingerprint.len(), 20);
+            }
+            other => panic!("expected RData::SSHFP, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_rdata_sshfp_rejects_garbage() {
+        let r = parse_rdata(RecordType::SSHFP, "not-an-algorithm 1 aabb");
+        assert!(r.is_err(), "expected error for malformed SSHFP, got {r:?}");
     }
 }

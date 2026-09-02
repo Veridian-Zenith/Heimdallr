@@ -12,7 +12,7 @@
 //! `hostadmin` setting, ensuring consistency across all zones.
 
 use anyhow::{Result, bail};
-use hickory_server::proto::rr::rdata::{HTTPS, SVCB};
+use hickory_server::proto::rr::rdata::{HTTPS, SSHFP, SVCB};
 use hickory_server::proto::rr::{LowerName, Name, RData, Record, RecordType, RrKey};
 use hickory_server::store::file::{FileConfig, FileZoneHandler};
 use hickory_server::zone_handler::{AxfrPolicy, ZoneType};
@@ -173,6 +173,23 @@ pub fn parse_https_data(data: &str) -> Result<HTTPS> {
     match rdata {
         RData::HTTPS(https) => Ok(https),
         other => bail!("expected RData::HTTPS, got {other:?}"),
+    }
+}
+
+/// Parse SSHFP (RFC 4255) presentation-format rdata into a typed [`SSHFP`].
+///
+/// `data` is everything after `IN SSHFP` in the zone file, e.g.
+/// `2 1 123456789abcdef67890123456789abcdef67890` (algorithm fingerprint_type
+/// hex_fingerprint). The fingerprint is hex-decoded; case-insensitive.
+pub fn parse_sshfp_data(data: &str) -> Result<SSHFP> {
+    let rdata = parse_svcb_rdata(RecordType::SSHFP, data)?;
+    match rdata {
+        RData::SSHFP(sshfp) => Ok(sshfp),
+        // Defensive: RData::try_from_str(RecordType::SSHFP, _) is guaranteed
+        // to produce RData::SSHFP per its match arm in hickory, but if a
+        // future release changes that we want a clean error rather than a
+        // panic.
+        other => bail!("expected RData::SSHFP, got {other:?}"),
     }
 }
 
@@ -374,5 +391,52 @@ mod tests {
             "expected Key(65280), got {:?}",
             svcb.svc_params[0].0
         );
+    }
+
+    // M5.2 — SSHFP (RFC 4255)
+
+    /// RFC 4255 §3.1 wire format: `<algorithm> <fingerprint_type> <hex>`.
+    /// Example from RFC 4255 §3.2: `host.example. SSHFP 2 1 123456789abcdef67890123456789abcdef67890`.
+    #[test]
+    fn parse_sshfp_rfc4255_example() {
+        // The hex string is 40 chars = 20 bytes (SHA-1 length).
+        let hex = "123456789abcdef67890123456789abcdef67890";
+        let sshfp = parse_sshfp_data(&format!("2 1 {hex}")).expect("SSHFP parses");
+        assert_eq!(u8::from(sshfp.algorithm), 2, "algorithm=2 is DSA");
+        assert_eq!(
+            u8::from(sshfp.fingerprint_type),
+            1,
+            "fingerprint_type=1 is SHA-1"
+        );
+        assert_eq!(sshfp.fingerprint.len(), 20, "SHA-1 fingerprint is 20 bytes");
+        // Round-trip the hex ourselves to validate the parser output
+        // against the same input.
+        let expected = (0..hex.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+            .collect::<Vec<u8>>();
+        assert_eq!(sshfp.fingerprint, expected);
+    }
+
+    /// Algorithm 4 (Ed25519) with SHA-256 fingerprint type (RFC 7479).
+    /// 32-byte fingerprint.
+    #[test]
+    fn parse_sshfp_ed25519_sha256() {
+        let hex = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let sshfp = parse_sshfp_data(&format!("4 2 {hex}")).expect("Ed25519+SHA256 parses");
+        assert_eq!(u8::from(sshfp.algorithm), 4, "algorithm=4 is Ed25519");
+        assert_eq!(
+            u8::from(sshfp.fingerprint_type),
+            2,
+            "fingerprint_type=2 is SHA-256"
+        );
+        assert_eq!(sshfp.fingerprint.len(), 32);
+    }
+
+    /// Malformed input (non-numeric algorithm) must error, not panic.
+    #[test]
+    fn parse_sshfp_rejects_garbage() {
+        let r = parse_sshfp_data("not-an-algorithm 1 aabb");
+        assert!(r.is_err(), "expected error for malformed SSHFP, got {r:?}");
     }
 }

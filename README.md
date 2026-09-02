@@ -157,7 +157,7 @@ Milestones are gates — do not start `M(n+1)` before `M(n)` passes. Linux-only;
 
 | Milestone | Scope | Gate |
 |-----------|-------|------|
-| **M5** Advanced Records & Behaviors | SVCB/HTTPS ✅, URI, SSHFP, DNAME, ANAME (apex CNAME flattening), case randomization, CNAME cloaking, DANE hash auto-gen, DNS64, EDNS Client Subnet | M5.1 SVCB/HTTPS landed (`faad4e6`) |
+| **M5** Advanced Records & Behaviors | SVCB/HTTPS ✅, SSHFP ✅, URI, DNAME, ANAME (apex CNAME flattening), case randomization, CNAME cloaking, DANE hash auto-gen, DNS64, EDNS Client Subnet | M5.1 + M5.2 landed |
 
 ### Planned
 
@@ -479,7 +479,7 @@ cargo audit
 | 7314 | EDNS EXPIRE | M5 |
 | 9460 | SVCB/HTTPS | M5 |
 | 7553 | URI | M5 |
-| 4255 | SSHFP | M5 |
+| 4255 | SSHFP | ✅ M5.2 |
 | 6672 | DNAME | M5 |
 | 6147 | DNS64 | M5 |
 
@@ -525,7 +525,7 @@ Heimdallr is a DNS server — every UDP packet is untrusted, every TCP/TLS/QUIC 
 | DNSSEC | RSA/ECDSA/EdDSA, NSEC+NSEC3 | ✅ M3 via ring + botan |
 | Encrypted | DoT/DoH/DoQ, PROXY v1/v2 | ✅ M4 |
 | QNAME min | opt-in (always on by default) | ✅ **M5.4** opt-in (`enable=false` default) |
-| Records | DANE, SVCB/HTTPS ✅, URI, SSHFP, DNAME, ANAME, APP | ✅ DANE M3 · ✅ SVCB/HTTPS M5.1 |
+| Records | DANE, SVCB/HTTPS ✅, SSHFP ✅, URI, DNAME, ANAME, APP | ✅ DANE M3 · ✅ SVCB/HTTPS M5.1 · ✅ SSHFP M5.2 |
 | Zones | Primary/Secondary/Stub/CondFwd + catalog, AXFR/IXFR/NOTIFY | ✅ M2 / M9 |
 | Filter | AdvancedBlocking, DnsBlockList, BlockPage | M6 |
 | Forwarding | Latency concurrency | resolver.concurrency + M9 |
