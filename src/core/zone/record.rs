@@ -339,6 +339,17 @@ fn parse_rdata(rtype: RecordType, data: &str) -> Result<RData> {
             let tlsa = parse_tlsa_data(data)?;
             Ok(RData::TLSA(tlsa))
         }
+        RecordType::SVCB => {
+            // M5.1: RFC 9460 SVCB presentation-format rdata
+            // (e.g. "1 . alpn=\"h2,h3\" ipv4hint=192.0.2.1").
+            let svcb = super::file::parse_svcb_data(data)?;
+            Ok(RData::SVCB(svcb))
+        }
+        RecordType::HTTPS => {
+            // M5.1: RFC 9460/9461 HTTPS — SVCB with the HTTPS rdata tag.
+            let https = super::file::parse_https_data(data)?;
+            Ok(RData::HTTPS(https))
+        }
         RecordType::CAA => {
             bail!("CAA record insertion via API not yet supported (use zone file)");
         }
@@ -479,5 +490,47 @@ mod tests {
         assert_eq!(parse_record_type("tlsa").unwrap(), RecordType::TLSA);
         assert_eq!(parse_record_type("AAAA").unwrap(), RecordType::AAAA);
         assert!(parse_record_type("INVALID").is_err());
+    }
+
+    // M5.1 — SVCB / HTTPS API insertion (presentation-format rdata)
+
+    #[test]
+    fn parse_rdata_svcb_basic() {
+        // RFC 9460 §2.4.2: priority=10, target=svc1.example.com., ipv4hint=192.0.2.1
+        let r = parse_rdata(RecordType::SVCB, "10 svc1.example.com. ipv4hint=192.0.2.1").unwrap();
+        match r {
+            RData::SVCB(svcb) => {
+                assert_eq!(svcb.svc_priority, 10);
+                assert_eq!(
+                    svcb.target_name,
+                    Name::from_ascii("svc1.example.com.").unwrap()
+                );
+                assert!(!svcb.svc_params.is_empty());
+            }
+            other => panic!("expected RData::SVCB, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_rdata_https_alpn() {
+        // RFC 9461 §3: HTTPS apex with alpn="h2,h3", target=.
+        let r = parse_rdata(RecordType::HTTPS, "1 . alpn=\"h2,h3\"").unwrap();
+        match r {
+            RData::HTTPS(https) => {
+                // HTTPS is a newtype around SVCB (hickory struct field, not method).
+                let inner = &https.0;
+                assert_eq!(inner.svc_priority, 1);
+                assert_eq!(inner.target_name, Name::root());
+                assert!(!inner.svc_params.is_empty());
+            }
+            other => panic!("expected RData::HTTPS, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_rdata_svcb_rejects_garbage() {
+        // hickory's lexer must reject malformed priority tokens.
+        let r = parse_rdata(RecordType::SVCB, "not-a-priority .");
+        assert!(r.is_err(), "expected error for malformed SVCB, got {r:?}");
     }
 }

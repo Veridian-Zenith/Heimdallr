@@ -46,6 +46,7 @@ squash-merge once the gate closes:
 | PR | ID | Sub-task | Commit | CI run | Notes |
 |----|----|----------|--------|--------|-------|
 | 1 | M5.4 | QNAME minimization (RFC 9156) | [`47569fe`](https://github.com/Veridian-Zenith/Heimdallr/commit/47569fe) on `main` | [run 33571400992](https://github.com/Veridian-Zenith/Heimdallr/actions/runs/33571400992) ✅ | opt-in (`enable=false` default); 10 unit tests; `tests/qname-min-validate.sh`; clippy/fmt/audit/deny clean. Driver in `src/core/resolver/qname_min.rs`; wiring in `src/core/resolver/forward.rs`. |
+| 2 | M5.1 | SVCB / HTTPS (RFC 9460/9461) | [`faad4e6`](https://github.com/Veridian-Zenith/Heimdallr/commit/faad4e6) on `main` (parser) + this commit (API + docs) | [run 33573013483](https://github.com/Veridian-Zenith/Heimdallr/actions/runs/33573013483) ✅ (parser run) | Parser in `src/core/zone/file.rs` (`parse_svcb_data` / `parse_https_data`); API CRUD wired in `src/core/zone/record.rs::parse_rdata`; 3 unit tests for SVCB basic, HTTPS alpn, garbage rejection. Round-trip works (hickory `Display` is stable key-order). Next: **M5.2 SSHFP** — copy-paste of M5.1 plumbing. |
 
 ## Opening the first sub-task issue
 

@@ -157,7 +157,7 @@ Milestones are gates — do not start `M(n+1)` before `M(n)` passes. Linux-only;
 
 | Milestone | Scope | Gate |
 |-----------|-------|------|
-| **M5** Advanced Records & Behaviors | SVCB/HTTPS, URI, SSHFP, DNAME, ANAME (apex CNAME flattening), case randomization, CNAME cloaking, DANE hash auto-gen, DNS64, EDNS Client Subnet | |
+| **M5** Advanced Records & Behaviors | SVCB/HTTPS ✅, URI, SSHFP, DNAME, ANAME (apex CNAME flattening), case randomization, CNAME cloaking, DANE hash auto-gen, DNS64, EDNS Client Subnet | M5.1 SVCB/HTTPS landed (`faad4e6`) |
 
 ### Planned
 
@@ -525,7 +525,7 @@ Heimdallr is a DNS server — every UDP packet is untrusted, every TCP/TLS/QUIC 
 | DNSSEC | RSA/ECDSA/EdDSA, NSEC+NSEC3 | ✅ M3 via ring + botan |
 | Encrypted | DoT/DoH/DoQ, PROXY v1/v2 | ✅ M4 |
 | QNAME min | opt-in (always on by default) | ✅ **M5.4** opt-in (`enable=false` default) |
-| Records | DANE, SVCB/HTTPS, URI, SSHFP, DNAME, ANAME, APP | M5 |
+| Records | DANE, SVCB/HTTPS ✅, URI, SSHFP, DNAME, ANAME, APP | ✅ DANE M3 · ✅ SVCB/HTTPS M5.1 |
 | Zones | Primary/Secondary/Stub/CondFwd + catalog, AXFR/IXFR/NOTIFY | ✅ M2 / M9 |
 | Filter | AdvancedBlocking, DnsBlockList, BlockPage | M6 |
 | Forwarding | Latency concurrency | resolver.concurrency + M9 |
