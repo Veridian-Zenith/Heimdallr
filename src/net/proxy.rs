@@ -1,6 +1,7 @@
-#![allow(dead_code)]
 // SPDX-License-Identifier: OSL-3.0
 // Copyright (c) 2026 Veridian Zenith
+
+#![allow(dead_code)]
 
 //! PROXY protocol v1/v2 parser (`HAProxy` spec, Technitium parity `M4`).
 //!
