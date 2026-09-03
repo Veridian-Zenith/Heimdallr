@@ -44,13 +44,6 @@ async-trait = "0.1"
 criterion = { version = "0.8", features = ["async_tokio"] }
 tempfile = "3"
 
-# Patch: tinyvec 1.13.0 has a missing `alloc::vec` macro import under
-# rust 1.98 — the upstream crate imports the `vec` module but not the
-# `vec!` macro (which is at the crate root in `alloc`). Apply a local
-# fix to keep CI green without downgrading the transitive dependency.
-[patch.crates-io]
-tinyvec = { path = "patches/tinyvec" }
-
 [[bench]]
 name = "cache_bench"
 harness = false
