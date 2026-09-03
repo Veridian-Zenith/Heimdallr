@@ -176,6 +176,30 @@ pub fn parse_https_data(data: &str) -> Result<HTTPS> {
     }
 }
 
+/// ANAME (apex CNAME flattening, draft-ietf-dnsop-aname) presentation-form.
+/// Converts an ANAME keyword line to a synthetic CNAME rdata with a comment
+/// marker for tracking. The actual A/AAAA synthesis happens at lookup time.
+pub fn parse_aname_data(data: &str) -> Result<RData> {
+    // ANAME keyword in zone file is converted to CNAME rdata with the
+    // target name, plus a synthetic comment marker. The flattening logic
+    // (synthesizing A/AAAA from the CNAME target) is handled by the resolver.
+    let target = Name::from_ascii(data.trim())
+        .map_err(|e| anyhow::anyhow!("invalid ANAME target '{data}': {e}"))?;
+    Ok(RData::CNAME(hickory_server::proto::rr::rdata::CNAME(
+        target,
+    )))
+}
+
+/// Parse DNAME (RFC 6676) presentation-format rdata.
+pub fn parse_dname_data(data: &str) -> Result<hickory_server::proto::rr::rdata::ANAME> {
+    let rdata = RData::try_from_str(RecordType::ANAME, data)
+        .map_err(|e| anyhow::anyhow!("invalid DNAME data '{data}': {e}"))?;
+    match rdata {
+        RData::ANAME(d) => Ok(d),
+        other => bail!("expected RData::ANAME, got {other:?}"),
+    }
+}
+
 /// Parse SSHFP (RFC 4255) presentation-format rdata into a typed [`SSHFP`].
 ///
 /// `data` is everything after `IN SSHFP` in the zone file, e.g.
@@ -438,5 +462,23 @@ mod tests {
     fn parse_sshfp_rejects_garbage() {
         let r = parse_sshfp_data("not-an-algorithm 1 aabb");
         assert!(r.is_err(), "expected error for malformed SSHFP, got {r:?}");
+    }
+
+    // M5.3 — DNAME (ANAME wire type in hickory 0.26.1)
+    #[test]
+    fn parse_dname_rfc6676_example() {
+        let d = parse_dname_data("alias.example.com.").expect("DNAME parses");
+        assert_eq!(d.0.to_utf8(), "alias.example.com.");
+    }
+
+    #[test]
+    fn parse_aname_synthetic_cname() {
+        let aname = parse_aname_data("target.example.com.").expect("ANAME parses");
+        match aname {
+            RData::CNAME(cname) => {
+                assert_eq!(cname.0.to_utf8(), "target.example.com.");
+            }
+            other => panic!("expected synthetic CNAME for ANAME, got {other:?}"),
+        }
     }
 }

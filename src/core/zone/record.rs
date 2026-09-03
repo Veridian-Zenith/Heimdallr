@@ -256,6 +256,8 @@ fn parse_record_type(s: &str) -> Result<RecordType> {
         "NSEC" => Ok(RecordType::NSEC),
         "NSEC3" => Ok(RecordType::NSEC3),
         "NSEC3PARAM" => Ok(RecordType::NSEC3PARAM),
+        "DNAME" => Ok(RecordType::ANAME),
+        "ANAME" => Ok(RecordType::CNAME), // ANAME rewrites to synthetic CNAME
         "ANY" => Ok(RecordType::ANY),
         other => {
             if let Ok(num) = other.parse::<u16>() {
@@ -356,6 +358,11 @@ fn parse_rdata(rtype: RecordType, data: &str) -> Result<RData> {
             // M5.1: RFC 9460/9461 HTTPS — SVCB with the HTTPS rdata tag.
             let https = super::file::parse_https_data(data)?;
             Ok(RData::HTTPS(https))
+        }
+        RecordType::ANAME => {
+            let name = Name::from_ascii(data)
+                .map_err(|e| anyhow::anyhow!("invalid DNAME '{data}': {e}"))?;
+            Ok(RData::ANAME(hickory_server::proto::rr::rdata::ANAME(name)))
         }
         RecordType::CAA => {
             bail!("CAA record insertion via API not yet supported (use zone file)");

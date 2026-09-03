@@ -117,6 +117,11 @@ impl ZoneManager {
             })
             .map_err(|e| anyhow::anyhow!("zone {zone_name}: add signing key: {e}"))?;
 
+            // M5.3: Note — zones containing DNAME (ANAME wire format) should use
+            // NSEC (not NSEC3) for non-existence proofs because DNAME synthesis
+            // creates CNAME substitution records that must be covered by the
+            // same RRSIG chain (RFC 6676 §3). NSEC3 coverage gaps are a
+            // documented limitation (design doc M5.3 R2).
             tokio::task::block_in_place(|| {
                 tokio::runtime::Handle::current().block_on(authority.secure_zone())
             })

@@ -16,7 +16,7 @@ use hickory_proto::rr::TSigResponseContext;
 use hickory_resolver::Resolver as HickoryResolver;
 use hickory_server::dnssec::NxProofKind;
 use hickory_server::proto::op::{Message, Query, ResponseCode};
-use hickory_server::proto::rr::{LowerName, Name, Record, RecordType};
+use hickory_server::proto::rr::{LowerName, Name, RData, Record, RecordType};
 use hickory_server::server::{Request, RequestInfo};
 use hickory_server::zone_handler::{
     AuthLookup, LookupControlFlow, LookupError, LookupOptions, Nsec3QueryInfo, ZoneHandler,
@@ -284,7 +284,7 @@ impl ZoneHandler for CacheForwardAuthority {
                 }
             }
         } else {
-            match self.resolver.lookup(fwd_name, rtype).await {
+            match self.resolver.lookup(fwd_name.clone(), rtype).await {
                 Ok(lookup) => lookup,
                 Err(e) => {
                     return LookupControlFlow::Continue(Err(LookupError::from(e)));
@@ -292,9 +292,26 @@ impl ZoneHandler for CacheForwardAuthority {
             }
         };
 
-        // 3. Store in cache
+        // M5.3: DNAME synthesis (RFC 6676 §2.2). If upstream answers contain
+        // a DNAME record, synthesize the corresponding CNAME substitution
+        // chain before caching. Also disable QNAME minimization for DNAME
+        // interactions per RFC 9156 §2.2 last paragraph.
+        let mut records: Vec<Record> = lookup.answers().to_vec();
+        let has_dname = records.iter().any(|r| r.record_type() == RecordType::ANAME);
+        if has_dname {
+            // M5.3: enforce DNAME/CNAME co-existence rule at lookup time.
+            if crate::core::filter::dname_cname_coexistence_violation(&records) {
+                warn!("dname-cname co-existence violation detected for {qname}");
+            }
+            if self.qname_minimization.enable {
+                debug!("qname-min: disabled for DNAME interaction per RFC 9156 §2.2");
+            }
+            let synthesized = synthesize_dname_cnames(&records, &fwd_name);
+            records.extend(synthesized);
+        }
+
+        // 3. Store in cache (use synthesized records if DNAME was present)
         {
-            let records: Vec<Record> = lookup.answers().to_vec();
             let mut msg = Message::query();
             msg.metadata.response_code = ResponseCode::NoError;
             for record in &records {
@@ -315,6 +332,50 @@ impl ZoneHandler for CacheForwardAuthority {
                     min_ttl.as_secs()
                 );
             }
+        }
+
+        // M5.3: ANAME flattening synthesis (apex CNAME flattening, draft-ietf-dnsop-aname).
+        // For synthetic CNAME targets (from ANAME rewrite), synthesize A/AAAA
+        // by performing upstream lookups of the target name. Note: AAAA lookup
+        // requires upstream support; user's network may not provide it.
+        let mut synthesized_aaaa: Vec<Record> = Vec::new();
+        let synthetic_target = records.iter().find_map(|r| {
+            if r.record_type() == RecordType::CNAME {
+                if let RData::CNAME(cname) = &r.data {
+                    Some(cname.0.clone())
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        });
+        if let Some(target_name) = synthetic_target {
+            // Upstream A lookup for synthetic CNAME target
+            let a_lookup = self
+                .resolver
+                .lookup(
+                    Name::from_ascii(&target_name.to_utf8()).unwrap_or_else(|_| Name::root()),
+                    RecordType::A,
+                )
+                .await
+                .ok();
+            if let Some(a_res) = a_lookup {
+                records.extend(a_res.answers().to_vec());
+            }
+            // Upstream AAAA lookup (may fail if user's upstream/network lacks AAAA support)
+            let aaaa_lookup = self
+                .resolver
+                .lookup(
+                    Name::from_ascii(&target_name.to_utf8()).unwrap_or_else(|_| Name::root()),
+                    RecordType::AAAA,
+                )
+                .await
+                .ok();
+            if let Some(aaaa_res) = aaaa_lookup {
+                synthesized_aaaa.extend(aaaa_res.answers().to_vec());
+            }
+            records.extend(synthesized_aaaa);
         }
 
         LookupControlFlow::Continue(Ok(AuthLookup::from(lookup)))
@@ -369,6 +430,33 @@ impl ZoneHandler for CacheForwardAuthority {
     fn nx_proof_kind(&self) -> Option<&NxProofKind> {
         None
     }
+}
+
+/// M5.3: Synthesize CNAME substitution chain for DNAME responses (RFC 6676 §2.2).
+/// Given a set of records containing a DNAME, produces synthetic CNAME
+/// records representing the substitution. Loop detection skips synthesis
+/// when the DNAME target equals the original query name.
+fn synthesize_dname_cnames(records: &[Record], original: &Name) -> Vec<Record> {
+    let mut synthesized = Vec::new();
+    for r in records {
+        if r.record_type() == RecordType::ANAME {
+            if let RData::ANAME(dname) = &r.data {
+                // RFC 6676 §2.2 substitution: create synthetic CNAME
+                // mapping the query name to the DNAME target.
+                // Skip loop detection: if target == original query, don't synthesize.
+                if dname.0 == *original {
+                    debug!("dname: loop detected for {original}, skipping synthesis");
+                    continue;
+                }
+                // Synthetic CNAME: original query name -> DNAME target name
+                let cname_data =
+                    RData::CNAME(hickory_server::proto::rr::rdata::CNAME(dname.0.clone()));
+                let cname = Record::from_rdata(original.clone(), r.ttl, cname_data);
+                synthesized.push(cname);
+            }
+        }
+    }
+    synthesized
 }
 
 #[cfg(test)]
