@@ -38,6 +38,7 @@ axum = { version = "0.8", features = ["json"] }
 hyper = "1"
 hyper-util = { version = "0.1", features = ["tokio", "server-auto", "service"] }
 tower = "0.5"
+tinyvec = "=1.12.0"
 async-trait = "0.1"
 
 [dev-dependencies]
