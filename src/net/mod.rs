@@ -242,6 +242,7 @@ impl Net {
             cache,
             dnssec_enabled,
             self.cfg.resolver.qname_minimization.clone(),
+            crate::core::filter::Filter::new(&self.cfg.filter),
         ))
     }
 }

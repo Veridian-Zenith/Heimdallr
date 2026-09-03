@@ -248,6 +248,8 @@ pub struct FilterConfig {
     pub cname_cloaking: bool,
     #[serde(default = "default_true")]
     pub rebinding: bool,
+    #[serde(default = "default_cname_chain_limit")]
+    pub cname_chain_limit: Option<u8>,
 }
 
 impl Default for FilterConfig {
@@ -259,6 +261,7 @@ impl Default for FilterConfig {
             per_client: std::collections::HashMap::new(),
             cname_cloaking: default_true(),
             rebinding: default_true(),
+            cname_chain_limit: default_cname_chain_limit(),
         }
     }
 }
@@ -289,6 +292,9 @@ impl Default for ProxyConfig {
             protocol: default_proxy_proto(),
         }
     }
+}
+fn default_cname_chain_limit() -> Option<u8> {
+    Some(8)
 }
 fn default_proxy_proto() -> String {
     "v2".into()

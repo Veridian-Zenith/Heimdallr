@@ -63,6 +63,8 @@ pub struct CacheForwardAuthority {
     dnssec_enabled: bool,
     /// M5.4: QNAME minimization config (RFC 9156, opt-in).
     qname_minimization: ResolverQnameMinimization,
+    /// M5.5: Filtering config (CNAME cloaking, rebinding, chain limits).
+    filter: crate::core::filter::Filter,
 }
 
 impl CacheForwardAuthority {
@@ -72,6 +74,7 @@ impl CacheForwardAuthority {
         cache: SharedCache,
         dnssec_enabled: bool,
         qname_minimization: ResolverQnameMinimization,
+        filter: crate::core::filter::Filter,
     ) -> Self {
         Self {
             origin,
@@ -79,6 +82,7 @@ impl CacheForwardAuthority {
             cache,
             dnssec_enabled,
             qname_minimization,
+            filter,
         }
     }
 
@@ -310,6 +314,18 @@ impl ZoneHandler for CacheForwardAuthority {
             records.extend(synthesized);
         }
 
+        // M5.5: CNAME cloaking enforcement (RFC 9156 / vendor-specific).
+        if self.filter.cname_cloaking && self.filter.cname_chain_truncated(&records) {
+            return LookupControlFlow::Continue(Err(LookupError::from(io::Error::other(
+                "CNAME chain truncated (limit exceeded)",
+            ))));
+        }
+
+        // M5.5: Rebinding protection.
+        if self.filter.rebinding && self.filter.rebinding_detected(&records) {
+            debug!("rebinding: private/internal address detected in response");
+        }
+
         // 3. Store in cache (use synthesized records if DNAME was present)
         {
             let mut msg = Message::query();
@@ -355,7 +371,7 @@ impl ZoneHandler for CacheForwardAuthority {
             let a_lookup = self
                 .resolver
                 .lookup(
-                    Name::from_ascii(&target_name.to_utf8()).unwrap_or_else(|_| Name::root()),
+                    Name::from_ascii(target_name.to_utf8()).unwrap_or_else(|_| Name::root()),
                     RecordType::A,
                 )
                 .await
@@ -367,7 +383,7 @@ impl ZoneHandler for CacheForwardAuthority {
             let aaaa_lookup = self
                 .resolver
                 .lookup(
-                    Name::from_ascii(&target_name.to_utf8()).unwrap_or_else(|_| Name::root()),
+                    Name::from_ascii(target_name.to_utf8()).unwrap_or_else(|_| Name::root()),
                     RecordType::AAAA,
                 )
                 .await
@@ -439,21 +455,20 @@ impl ZoneHandler for CacheForwardAuthority {
 fn synthesize_dname_cnames(records: &[Record], original: &Name) -> Vec<Record> {
     let mut synthesized = Vec::new();
     for r in records {
-        if r.record_type() == RecordType::ANAME {
-            if let RData::ANAME(dname) = &r.data {
-                // RFC 6676 §2.2 substitution: create synthetic CNAME
-                // mapping the query name to the DNAME target.
-                // Skip loop detection: if target == original query, don't synthesize.
-                if dname.0 == *original {
-                    debug!("dname: loop detected for {original}, skipping synthesis");
-                    continue;
-                }
-                // Synthetic CNAME: original query name -> DNAME target name
-                let cname_data =
-                    RData::CNAME(hickory_server::proto::rr::rdata::CNAME(dname.0.clone()));
-                let cname = Record::from_rdata(original.clone(), r.ttl, cname_data);
-                synthesized.push(cname);
+        if r.record_type() == RecordType::ANAME
+            && let RData::ANAME(dname) = &r.data
+        {
+            // RFC 6676 §2.2 substitution: create synthetic CNAME
+            // mapping the query name to the DNAME target.
+            // Skip loop detection: if target == original query, don't synthesize.
+            if dname.0 == *original {
+                debug!("dname: loop detected for {original}, skipping synthesis");
+                continue;
             }
+            // Synthetic CNAME: original query name -> DNAME target name
+            let cname_data = RData::CNAME(hickory_server::proto::rr::rdata::CNAME(dname.0.clone()));
+            let cname = Record::from_rdata(original.clone(), r.ttl, cname_data);
+            synthesized.push(cname);
         }
     }
     synthesized

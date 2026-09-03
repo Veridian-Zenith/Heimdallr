@@ -4,3 +4,4 @@ AGENTS.md
 *.swp
 *.swo
 *~
+.cargo

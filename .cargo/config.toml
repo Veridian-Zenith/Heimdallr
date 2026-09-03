@@ -1,3 +1,0 @@
-[build]
-# Default parallelism — override per-invocation with cargo build -j<N>
-jobs = 4
