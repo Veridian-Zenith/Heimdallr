@@ -1,0 +1,10 @@
+[package]
+name = "tinyvec"
+version = "1.13.0"
+edition = "2021"
+description = "Patched tinyvec 1.13.0 — fixes missing alloc::vec macro import under rust 1.98"
+license = "Zlib OR MIT OR Apache-2.0"
+publish = false
+
+[lib]
+path = "src/tinyvec.rs"

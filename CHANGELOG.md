@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added (Build-time Crypto Ban Guard)
 - `build.rs` enforces no `aws-lc-rs` / `aws-lc-sys` / `openssl` / `openssl-probe` / `openssl-sys` / `bssl` in dependency tree. Fails the build with a clear error if detected, matching the CI gate (`.github/workflows/ci.yml`).
 
+### Fixed
+- `tinyvec 1.13.0` upstream crate has a missing `alloc::vec` macro import under rust 1.98 (macro is at the crate root, not in the `vec` module). Applied a `[patch.crates-io]` to a local copy at `patches/tinyvec/` with the corrected import (`use alloc::{vec, vec::Vec};`) so CI builds without downgrading the transitive dependency.
+
 ### Added (M5.3 — DNAME / ANAME)
 - Parser plumbing: `RecordType::ANAME` added; `parse_rdata()` supports DNAME/ANAME wire format (`src/core/zone/record.rs`).
 - File parser: `parse_dname_data()` and `parse_aname_data()` added (`src/core/zone/file.rs`); ANAME rewrites to synthetic CNAME for apex flattening.
