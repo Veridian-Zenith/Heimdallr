@@ -39,7 +39,7 @@ From-zero Rust DNS server built to replace [Technitium DNS Server](https://techn
 |---|---|
 | **Binary** | `heimdallr` (single static binary, Linux) |
 | **License** | `OSL-3.0` — network use counts as distribution |
-| **Status** | `0.4.0-alpha` — M0 ✅ M1 ✅ M2 ✅ M3 ✅ M4 ✅ **M5.4 ✅** |
+| **Status** | `0.4.0-alpha` — M0 ✅ M1 ✅ M2 ✅ M3 ✅ M4 ✅ **M5.4 ✅** (see [CHANGELOG.md](CHANGELOG.md)) |
 
 ---
 
@@ -63,6 +63,7 @@ From-zero Rust DNS server built to replace [Technitium DNS Server](https://techn
 - [Contributing](#contributing)
 - [Security](#security)
 - [Branding](#branding)
+- [Changelog](CHANGELOG.md)
 - [License](#license)
 - [Contact](#contact)
 
