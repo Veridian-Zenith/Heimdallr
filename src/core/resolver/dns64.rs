@@ -105,7 +105,7 @@ mod tests {
         assert_eq!(result.len(), 1);
         assert_eq!(
             result[0].0,
-            Ipv6Addr::new(0x64, 0xff9b, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 192, 0, 2, 1)
+            Ipv6Addr::new(0x64, 0xff9b, 0, 0, 0, 0, 0xc000, 0x0201)
         );
     }
 
@@ -114,7 +114,10 @@ mod tests {
         let prefix = Dns64Prefix::parse("64:ff9b::/64").unwrap();
         let result = synthesize_aaaa(&[A(Ipv4Addr::new(192, 0, 2, 1))], prefix);
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].0, Ipv6Addr::new(0x64, 0xff9b, 0, 0, 0, 0, 0, 0));
+        assert_eq!(
+            result[0].0,
+            Ipv6Addr::new(0x64, 0xff9b, 0, 0, 0xc000, 0x0201, 0, 0)
+        );
     }
 
     #[test]
