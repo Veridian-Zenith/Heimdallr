@@ -78,6 +78,8 @@ pub struct ResolverConfig {
     pub ecs: bool,
     #[serde(default = "default_concurrency")]
     pub concurrency: u8,
+    #[serde(default)]
+    pub dns64_prefix: Option<String>,
     #[serde(default = "default_timeout_ms")]
     pub timeout_ms: u64,
 }
@@ -171,6 +173,7 @@ impl Default for ResolverConfig {
             ecs: false,
             concurrency: default_concurrency(),
             timeout_ms: default_timeout_ms(),
+            dns64_prefix: None,
         }
     }
 }

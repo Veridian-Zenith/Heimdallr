@@ -236,6 +236,13 @@ impl Net {
         );
         // M5.4: pass QNAME-minimization config to the forwarder.
         // Default is opt-out (enable=false) — behavior unchanged.
+        // M5.6: DNS64 prefix for AAAA synthesis.
+        let dns64_prefix = self
+            .cfg
+            .resolver
+            .dns64_prefix
+            .as_deref()
+            .and_then(crate::core::resolver::dns64::Dns64Prefix::parse);
         Ok(CacheForwardAuthority::new(
             origin,
             resolver,
@@ -243,6 +250,7 @@ impl Net {
             dnssec_enabled,
             self.cfg.resolver.qname_minimization.clone(),
             crate::core::filter::Filter::new(&self.cfg.filter),
+            dns64_prefix,
         ))
     }
 }

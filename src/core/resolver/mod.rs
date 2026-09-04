@@ -6,6 +6,7 @@
 
 #![allow(dead_code)]
 
+pub mod dns64;
 pub mod forward;
 pub mod qname_min;
 

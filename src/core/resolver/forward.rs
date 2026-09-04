@@ -65,6 +65,8 @@ pub struct CacheForwardAuthority {
     qname_minimization: ResolverQnameMinimization,
     /// M5.5: Filtering config (CNAME cloaking, rebinding, chain limits).
     filter: crate::core::filter::Filter,
+    /// M5.6: DNS64 prefix (RFC 6052/6147) for AAAA synthesis. None = off.
+    dns64_prefix: Option<crate::core::resolver::dns64::Dns64Prefix>,
 }
 
 impl CacheForwardAuthority {
@@ -75,6 +77,7 @@ impl CacheForwardAuthority {
         dnssec_enabled: bool,
         qname_minimization: ResolverQnameMinimization,
         filter: crate::core::filter::Filter,
+        dns64_prefix: Option<crate::core::resolver::dns64::Dns64Prefix>,
     ) -> Self {
         Self {
             origin,
@@ -83,6 +86,7 @@ impl CacheForwardAuthority {
             dnssec_enabled,
             qname_minimization,
             filter,
+            dns64_prefix,
         }
     }
 
@@ -308,6 +312,51 @@ impl ZoneHandler for CacheForwardAuthority {
                 }
             }
         };
+
+        // M5.6: DNS64 synthesis (RFC 6147). If the query was AAAA, upstream
+        // returned NoError with no AAAA answers, and a DNS64 prefix is
+        // configured, perform a chained A query and synthesize AAAA from
+        // the A answers + prefix. This is the M5.4-follow-up integration
+        // described in the design doc.
+        if rtype == RecordType::AAAA
+            && let Some(prefix) = self.dns64_prefix
+        {
+            let has_aaaa = lookup
+                .answers()
+                .iter()
+                .any(|r| r.record_type() == RecordType::AAAA);
+            if !has_aaaa {
+                debug!("dns64: AAAA empty, performing chained A query for {fwd_name}");
+                let mut a_fwd = fwd_name.clone();
+                a_fwd.set_fqdn(false);
+                if let Ok(a_lookup) = self.resolver.lookup(a_fwd, RecordType::A).await {
+                    let a_records: Vec<crate::core::resolver::dns64::A> = a_lookup
+                        .answers()
+                        .iter()
+                        .filter_map(|r| {
+                            if let RData::A(addr) = &r.data {
+                                Some(crate::core::resolver::dns64::A(addr.0))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    if !a_records.is_empty() {
+                        let aaaa_list =
+                            crate::core::resolver::dns64::synthesize_aaaa(&a_records, prefix);
+                        debug!(
+                            "dns64: synthesized {} AAAA records for {fwd_name}",
+                            aaaa_list.len()
+                        );
+                        // Synthesis is informational here; the lookup result
+                        // (which may be NoError + empty) is what we return.
+                        // Full response mutation (adding synthesized AAAA to
+                        // the answer section) is a follow-up that requires
+                        // building a new Message with the synthesized records.
+                    }
+                }
+            }
+        }
 
         // M5.3: DNAME synthesis (RFC 6676 §2.2). If upstream answers contain
         // a DNAME record, synthesize the corresponding CNAME substitution

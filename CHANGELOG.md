@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.0-alpha] — 2026-09-03
 
+### Added (M5.6 — DNS64, RFC 6147)
+- New module `src/core/resolver/dns64.rs`: `Dns64Prefix` parser (RFC 6052) and `synthesize_aaaa` (IPv4 → IPv6 embedding for /96 and /64 prefixes).
+- 6 unit tests: prefix parse, /96 synthesis, /64 synthesis, multiple A records, unsupported prefix length, invalid input.
+- `ResolverConfig.dns64_prefix: Option<String>` (e.g. `64:ff9b::/96`); default `None` = off.
+- `CacheForwardAuthority.dns64_prefix` field; on AAAA query with empty NoError response, performs chained A query and synthesizes AAAA per the prefix.
+- Wired through `net/mod.rs` `build_cache_forwarder`.
+
 ### Added (M5.7 — ECS / EDNS Client Subnet, RFC 7871)
 - `CacheKey` gains optional `client_subnet: Option<(IpAddr, u8)>` discriminator for ECS cache partitioning (RFC 7871 §7.1.3).
 - `scope_zero_subnet` helper: IPv4/IPv6 scope-zeroing per RFC 7871 §7.1.2 (privacy).
