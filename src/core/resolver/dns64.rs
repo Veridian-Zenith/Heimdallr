@@ -94,10 +94,7 @@ mod tests {
     #[test]
     fn parse_prefix_basic() {
         let p = Dns64Prefix::parse("64:ff9b::/96").unwrap();
-        assert_eq!(
-            p.addr,
-            Ipv6Addr::new(0x64, 0xff9b, 0, 0, 0, 0, 0, 0)
-        );
+        assert_eq!(p.addr, Ipv6Addr::new(0x64, 0xff9b, 0, 0, 0, 0, 0, 0));
         assert_eq!(p.len, 96);
     }
 
@@ -117,10 +114,7 @@ mod tests {
         let prefix = Dns64Prefix::parse("64:ff9b::/64").unwrap();
         let result = synthesize_aaaa(&[A(Ipv4Addr::new(192, 0, 2, 1))], prefix);
         assert_eq!(result.len(), 1);
-        assert_eq!(
-            result[0].0,
-            Ipv6Addr::new(0x64, 0xff9b, 0, 0, 0, 0, 0, 0)
-        );
+        assert_eq!(result[0].0, Ipv6Addr::new(0x64, 0xff9b, 0, 0, 0, 0, 0, 0));
     }
 
     #[test]
