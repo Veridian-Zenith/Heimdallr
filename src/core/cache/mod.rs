@@ -11,11 +11,15 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
-/// Cache key: (qname lowercase, qtype).
+/// Cache key: (qname lowercase, qtype, optional client-subnet scope for ECS M5.7).
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct CacheKey {
     pub qname: String,
     pub qtype: u16,
+    /// M5.7: optional client subnet (address, source_prefix) for ECS cache partitioning.
+    /// `None` means "no ECS" (default). When ECS is enabled, the upstream
+    /// `scope_prefix` is used as the discriminator (RFC 7871 §7.1.3).
+    pub client_subnet: Option<(std::net::IpAddr, u8)>,
 }
 
 /// A single cached response entry.
@@ -245,6 +249,7 @@ mod tests {
         let key = CacheKey {
             qname: "example.com".into(),
             qtype: 1,
+            client_subnet: None,
         };
         cache.insert(key.clone(), vec![1, 2, 3], Duration::from_secs(60));
         let (bytes, stale, hits) = cache.lookup(&key).unwrap();
@@ -259,6 +264,7 @@ mod tests {
         let key = CacheKey {
             qname: "example.com".into(),
             qtype: 1,
+            client_subnet: None,
         };
         cache.insert(key.clone(), vec![1, 2, 3], Duration::from_secs(60));
 
@@ -275,6 +281,7 @@ mod tests {
         let key = CacheKey {
             qname: "example.com".into(),
             qtype: 1,
+            client_subnet: None,
         };
         assert!(cache.lookup(&key).is_none());
         cache.record_miss();
@@ -286,6 +293,7 @@ mod tests {
         let mut cache = Cache::new(test_config(3));
         for i in 0..5 {
             let key = CacheKey {
+                client_subnet: None,
                 qname: format!("host{i}.com"),
                 qtype: 1,
             };
@@ -297,7 +305,8 @@ mod tests {
             cache
                 .lookup(&CacheKey {
                     qname: "host0.com".into(),
-                    qtype: 1
+                    qtype: 1,
+                    client_subnet: None,
                 })
                 .is_none()
         );
@@ -305,7 +314,8 @@ mod tests {
             cache
                 .lookup(&CacheKey {
                     qname: "host1.com".into(),
-                    qtype: 1
+                    qtype: 1,
+                    client_subnet: None,
                 })
                 .is_none()
         );
@@ -314,7 +324,8 @@ mod tests {
             cache
                 .lookup(&CacheKey {
                     qname: "host2.com".into(),
-                    qtype: 1
+                    qtype: 1,
+                    client_subnet: None,
                 })
                 .is_some()
         );
@@ -330,6 +341,7 @@ mod tests {
         let key = CacheKey {
             qname: "example.com".into(),
             qtype: 1,
+            client_subnet: None,
         };
         // Insert with very short TTL
         cache.insert(key.clone(), vec![1, 2, 3], Duration::from_millis(50));
@@ -352,6 +364,7 @@ mod tests {
         let key = CacheKey {
             qname: "example.com".into(),
             qtype: 1,
+            client_subnet: None,
         };
         cache.insert(key.clone(), vec![1, 2, 3], Duration::from_millis(10));
         std::thread::sleep(Duration::from_millis(80));
@@ -369,6 +382,7 @@ mod tests {
         let key = CacheKey {
             qname: "example.com".into(),
             qtype: 1,
+            client_subnet: None,
         };
         cache.insert(key.clone(), vec![1, 2, 3], Duration::from_secs(60));
         // No hits yet, so threshold = 2 * 0 = 0, but TTL is 60s
@@ -388,6 +402,7 @@ mod tests {
         let key = CacheKey {
             qname: "example.com".into(),
             qtype: 1,
+            client_subnet: None,
         };
         cache.insert(key.clone(), vec![1, 2, 3], Duration::from_secs(60));
         cache.lookup(&key);
@@ -404,6 +419,7 @@ mod tests {
         let key = CacheKey {
             qname: "example.com".into(),
             qtype: 1,
+            client_subnet: None,
         };
         cache.insert(key.clone(), vec![1], Duration::from_secs(60));
         cache.insert(key.clone(), vec![2], Duration::from_secs(60));
@@ -434,6 +450,7 @@ mod tests {
 
         for i in 0..2000 {
             let key = CacheKey {
+                client_subnet: None,
                 qname: format!("fuzz{}.example.com", fuzz_byte(&mut seed) as u16 % 100),
                 qtype: fuzz_byte(&mut seed) as u16,
             };
@@ -482,6 +499,7 @@ mod tests {
         let key = CacheKey {
             qname: "fuzz-target.example.com".into(),
             qtype: 1,
+            client_subnet: None,
         };
         cache.insert(key.clone(), vec![42; 256], Duration::from_secs(60));
 
@@ -503,10 +521,12 @@ mod tests {
         let key_zero = CacheKey {
             qname: "zero-ttl.example.com".into(),
             qtype: 1,
+            client_subnet: None,
         };
         let key_max = CacheKey {
             qname: "max-ttl.example.com".into(),
             qtype: 1,
+            client_subnet: None,
         };
 
         // Zero TTL — should be immediately expired

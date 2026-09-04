@@ -101,6 +101,7 @@ impl CacheForwardAuthority {
             let key = CacheKey {
                 qname: qname.clone(),
                 qtype: u16::from(rtype),
+                client_subnet: None,
             };
 
             // Check cache first
@@ -141,6 +142,7 @@ impl CacheForwardAuthority {
                         let cache_key = CacheKey {
                             qname: qname.clone(),
                             qtype: u16::from(rtype),
+                            client_subnet: None,
                         };
                         let mut cache = self.cache.write().await;
                         cache.insert(cache_key, bytes, min_ttl);
@@ -189,7 +191,7 @@ impl ZoneHandler for CacheForwardAuthority {
         &self,
         name: &LowerName,
         rtype: RecordType,
-        _request_info: Option<&RequestInfo<'_>>,
+        request_info: Option<&RequestInfo<'_>>,
         _lookup_options: LookupOptions,
     ) -> LookupControlFlow<AuthLookup> {
         // RFC 8482: ANY queries — return only A or AAAA, not the full set.
@@ -199,9 +201,19 @@ impl ZoneHandler for CacheForwardAuthority {
         }
 
         let qname = name.to_utf8();
+        // M5.7: ECS cache key partition — extract client subnet scope if present
+        // in the request. Disabled (None) when `resolver.ecs = false`.
+        let client_subnet = if self.qname_minimization.enable {
+            // qname_minimization is reused as a proxy for resolver.ecs config
+            // here only as a placeholder; full ECS toggle is wired in M5.7 follow-up.
+            extract_ecs_scope(request_info)
+        } else {
+            None
+        };
         let key = CacheKey {
             qname: qname.clone(),
             qtype: u16::from(rtype),
+            client_subnet,
         };
 
         // 1. Check cache
@@ -237,6 +249,7 @@ impl ZoneHandler for CacheForwardAuthority {
                                 let key = CacheKey {
                                     qname: name.to_utf8(),
                                     qtype: u16::from(rtype),
+                                    client_subnet: None,
                                 };
                                 let mut cache = cache.write().await;
                                 cache.insert(key, bytes, min_ttl);
@@ -448,6 +461,56 @@ impl ZoneHandler for CacheForwardAuthority {
     }
 }
 
+/// M5.7: Zero the trailing bits of an IP address per its source prefix
+/// (RFC 7871 §7.1.2 privacy scope-zeroing).
+/// e.g. 192.0.2.123/24 -> 192.0.2.0/24
+fn scope_zero_subnet(addr: std::net::IpAddr, source_prefix: u8) -> (std::net::IpAddr, u8) {
+    match addr {
+        std::net::IpAddr::V4(v4) => {
+            let mask = if source_prefix == 0 {
+                0u32
+            } else if source_prefix >= 32 {
+                0xFFFF_FFFFu32
+            } else {
+                (!0u32) << (32 - source_prefix)
+            };
+            let octets = v4.octets();
+            let ip = u32::from_be_bytes(octets) & mask;
+            (
+                std::net::IpAddr::V4(std::net::Ipv4Addr::from(ip)),
+                source_prefix,
+            )
+        }
+        std::net::IpAddr::V6(v6) => {
+            let mask = if source_prefix == 0 {
+                u128::MIN
+            } else if source_prefix >= 128 {
+                u128::MAX
+            } else {
+                (!0u128) << (128 - source_prefix)
+            };
+            let ip = u128::from(v6) & mask;
+            (
+                std::net::IpAddr::V6(std::net::Ipv6Addr::from(ip)),
+                source_prefix,
+            )
+        }
+    }
+}
+
+/// M5.7: Extract ECS scope from request info (if present).
+/// Returns the scope-zeroed (address, scope_prefix) for cache partitioning.
+///
+/// Note: hickory's `RequestInfo` does not currently expose the EDNS options
+/// (they live on the `Request` message itself, not the parsed `RequestInfo`).
+/// Until `lookup` gains access to the full `Request`, this function returns
+/// `None` and ECS cache partitioning is a structural no-op. The `CacheKey`
+/// shape and `scope_zero_subnet` helper are still in place so M5.6 (DNS64)
+/// and the follow-up ECS wiring can plug in without further cache changes.
+fn extract_ecs_scope(_request_info: Option<&RequestInfo<'_>>) -> Option<(std::net::IpAddr, u8)> {
+    None
+}
+
 /// M5.3: Synthesize CNAME substitution chain for DNAME responses (RFC 6676 §2.2).
 /// Given a set of records containing a DNAME, produces synthetic CNAME
 /// records representing the substitution. Loop detection skips synthesis
@@ -503,5 +566,30 @@ mod tests {
         let extra = std::str::from_utf8(&buf[2..]).unwrap();
         assert_eq!(code, 42);
         assert_eq!(extra, msg);
+    }
+
+    // M5.7 — ECS scope-zeroing
+    #[test]
+    fn scope_zero_ipv4_24() {
+        let addr: std::net::IpAddr = "192.0.2.123".parse().unwrap();
+        let (zeroed, prefix) = scope_zero_subnet(addr, 24);
+        assert_eq!(zeroed.to_string(), "192.0.2.0");
+        assert_eq!(prefix, 24);
+    }
+
+    #[test]
+    fn scope_zero_ipv4_0() {
+        let addr: std::net::IpAddr = "192.0.2.123".parse().unwrap();
+        let (zeroed, prefix) = scope_zero_subnet(addr, 0);
+        assert_eq!(zeroed.to_string(), "0.0.0.0");
+        assert_eq!(prefix, 0);
+    }
+
+    #[test]
+    fn scope_zero_ipv4_32() {
+        let addr: std::net::IpAddr = "192.0.2.123".parse().unwrap();
+        let (zeroed, prefix) = scope_zero_subnet(addr, 32);
+        assert_eq!(zeroed.to_string(), "192.0.2.123");
+        assert_eq!(prefix, 32);
     }
 }

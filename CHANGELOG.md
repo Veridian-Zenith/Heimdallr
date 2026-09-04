@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.0-alpha] — 2026-09-03
 
+### Added (M5.7 — ECS / EDNS Client Subnet, RFC 7871)
+- `CacheKey` gains optional `client_subnet: Option<(IpAddr, u8)>` discriminator for ECS cache partitioning (RFC 7871 §7.1.3).
+- `scope_zero_subnet` helper: IPv4/IPv6 scope-zeroing per RFC 7871 §7.1.2 (privacy).
+- `extract_ecs_scope` wired into `CacheForwardAuthority::lookup` to read EDNS Subnet option from request info and partition the cache key.
+- 3 unit tests for scope-zeroing: IPv4 /24, /0, /32.
+- Note: full request-level EDNS access requires passing the `Request` to `lookup` (hickory's `RequestInfo` does not expose EDNS options directly). Structural pieces (cache key shape + helper) are in place; the runtime extraction is a follow-up.
+
+### Fixed
+- `tinyvec` pinned to `=1.12.0` in `[dependencies]` to avoid the broken `tinyvec 1.13.0` upstream crate (missing `alloc::vec` macro import under rust 1.98).
+
 ### Added (M5.5 — CNAME Cloaking / Filter Enforcement)
 - `Filter` struct now config-driven: `cname_chain_limit` (default 8), `cname_cloaking`, `rebinding`.
 - `FilterConfig.cname_chain_limit: Option<u8>` added.
