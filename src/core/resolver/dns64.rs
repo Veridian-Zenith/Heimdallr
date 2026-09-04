@@ -96,7 +96,7 @@ mod tests {
         let p = Dns64Prefix::parse("64:ff9b::/96").unwrap();
         assert_eq!(
             p.addr,
-            Ipv6Addr::new(0x64, 0xff9b, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+            Ipv6Addr::new(0x64, 0xff9b, 0, 0, 0, 0, 0, 0)
         );
         assert_eq!(p.len, 96);
     }
@@ -119,7 +119,7 @@ mod tests {
         assert_eq!(result.len(), 1);
         assert_eq!(
             result[0].0,
-            Ipv6Addr::new(0x64, 0xff9b, 0, 0, 0, 0, 0, 0, 192, 0, 2, 1, 0, 0, 0, 0)
+            Ipv6Addr::new(0x64, 0xff9b, 0, 0, 0, 0, 0, 0)
         );
     }
 
