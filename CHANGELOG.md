@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configurable via web UI / config later (`postgres_url` optional, `table` configurable).
 - Independent from M6.4 PG query log (`dns_logs` table); metrics are counters, not per-query events.
 
+### Complete (M6.5 — Metrics wiring + M6.3 persistent load/save + M6.6 full HTTP API)
+- Metrics (`MetricsRegistry`) now incremented at all call sites: `Cache::lookup_with_metrics` (cache hits/misses wired to `forward.rs` and `lookup_any`), `resolve_with_minimization` (`qmin_steps_total` + fallback +1), `dns64::synthesize_aaaa` (`dns64_synthesized_total`). OpenMetrics `/metrics` endpoint served via `MetricsConfig::enable` (default `true`). Filter stats endpoint `/api/filter/stats` returns real `blocklist.len()` (via `Arc<Filter>` in `ApiState`). Config `dns64` uses top-level `[dns64]` block with legacy `[resolver].dns64_prefix` fallback. `CacheConfig.persistent_max_age_days` honored; `load_from_file` skips stale snapshots; `save_to_file` writes `serde_json`. `ecs` gate fixed (reads `self.cfg.resolver.ecs` directly, not `qname_minimization.enable`). All 141 tests pass; `fmt` + `clippy -D` + `audit` + `deny` clean.
+
 ### Added (M6.4 — Query Log, PostgreSQL-backed)
 - `src/core/log/query_log.rs`: buffered async writer connecting to internal PG instance (`localhost:5432`, user `postgres`, DB `dnsquerylogs`, data dir `/var/lib/postgres/data`, table `dns_logs` per `/etc/voix.conf` ACL and actual instance inspection). Client IP stored as `inet`. Internal instance stub: starts its own PG (`postgres -D /var/lib/heimdallr/pg`) if running instance unreachable.
 - `QueryLogConfig`: `postgres_url` (optional, default `postgresql://postgres@localhost:5432/dnsquerylogs`), `table` (`dns_logs`), `buffer_size` (64), `flush_interval_ms` (100).

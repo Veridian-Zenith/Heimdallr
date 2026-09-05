@@ -221,3 +221,6 @@ format = "json"
 ---
 
 — End of M6 design —
+
+---
+**M6 Design → Implementation Note (2026-09-05):** The design doc calls for bincode (`M6.3`), but the audit removed `bincode` for `serde_json`. Metrics (`M6.5`) now use the real `LazyLock` global registry (previously only partially wired). Filter stats (`M6.6`) return the actual `Filter.blocklist.len()` via `Arc<Filter>` in `ApiState`. Persistent cache (`persistent_max_age_days`) is now honored on load. Query log writer (`M6.4`) uses the real `postgres` crate (`dns_logs` table, `inet` for `client_ip`). DNS64 (`M5.6`) synthesis reaches the response (`dns64_synthesized` added to `records` before caching/return). ECS (`M5.7`) uses `cfg.resolver.ecs` directly instead of `qname_minimization.enable` proxy. M7 (Apps / split-horizon / geo / web console / auth RBAC) may proceed.
