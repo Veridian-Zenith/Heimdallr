@@ -84,7 +84,8 @@ async fn main() -> anyhow::Result<()> {
     // M6.4: Spawn the PostgreSQL-backed query log writer if configured.
     if cfg.log.query_log.is_some() {
         let query_cfg = crate::core::log::query_log::QueryLogConfig {
-            postgres_url: cfg.log
+            postgres_url: cfg
+                .log
                 .query_log
                 .as_ref()
                 .map(|_| crate::core::log::query_log::QueryLogConfig::default_url())

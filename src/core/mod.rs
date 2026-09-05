@@ -3,9 +3,9 @@
 
 #[allow(dead_code)]
 pub mod cache;
-pub mod log;
 pub mod dnssec;
 pub mod filter;
+pub mod log;
 #[allow(dead_code)]
 pub mod metrics;
 pub mod rec;
