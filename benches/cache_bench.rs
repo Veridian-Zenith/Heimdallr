@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: OSL-3.0
 // Copyright (c) 2026 Veridian Zenith
 
+//! Note: `criterion` plot errors (`target/criterion/*/base/sample.json`) occur
+//! only when `gnuplot` is not installed; benchmarks themselves are valid.
+//! Use `std::hint::black_box` (standard) — no deprecated `criterion::black_box`.
+
 //! Performance benchmarks for Heimdallr Cache and PROXY protocol parser.
 
 use criterion::{Criterion, criterion_group, criterion_main};

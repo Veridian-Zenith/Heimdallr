@@ -10,6 +10,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// OpenMetrics text line format (simplified).
@@ -60,6 +61,10 @@ impl MetricName {
     }
 }
 
+/// Global persistent metrics registry (lazy-initialized, shared).
+static GLOBAL_METRICS: LazyLock<Arc<MetricsRegistry>> =
+    LazyLock::new(|| Arc::new(MetricsRegistry::new()));
+
 /// Shared metrics registry (atomic counters).
 #[derive(Debug, Default, Clone)]
 pub struct MetricsRegistry {
@@ -68,6 +73,21 @@ pub struct MetricsRegistry {
 }
 
 impl MetricsRegistry {
+    /// Increment the global persistent counter by `delta`.
+    pub fn increment_global(name: MetricName, delta: u64) {
+        GLOBAL_METRICS.increment(name, delta);
+    }
+
+    /// Read current value from the global persistent registry.
+    pub fn read_global(name: MetricName) -> u64 {
+        GLOBAL_METRICS.read(name)
+    }
+
+    /// Serialize the global persistent registry to OpenMetrics text.
+    pub fn serialize_global() -> String {
+        GLOBAL_METRICS.serialize()
+    }
+
     /// Create a new registry (pre-populated with all counters at 0).
     pub fn new() -> Self {
         let mut counters = HashMap::new();

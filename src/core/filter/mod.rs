@@ -148,11 +148,18 @@ impl Filter {
         }
         // Regex blocklist match (M6.2).
         if self.regex_blocklist.iter().any(|re| re.is_match(qname)) {
+            MetricsRegistry::new().increment(MetricName::BlockedTotal, 1);
             return true;
         }
-        blocklist_match(&self.blocklist, &self.allowlist, qname)
+        let blocked = blocklist_match(&self.blocklist, &self.allowlist, qname);
+        if blocked {
+            MetricsRegistry::increment_global(MetricName::BlockedTotal, 1);
+        }
+        blocked
     }
 }
+
+use crate::core::metrics::{MetricName, MetricsRegistry};
 
 /// M5.3: DNAME/ANAME co-existence check (RFC 6676 §2.2).
 /// Returns true if a name has both DNAME/ANAME and CNAME records.
@@ -181,20 +188,30 @@ impl Filter {
 
     /// M5.5: Check if CNAME chain exceeds limit.
     pub fn cname_chain_truncated(&self, records: &[Record]) -> bool {
-        self.cname_cloaking && self.cname_chain_count(records) > self.cname_chain_limit as usize
+        let truncated = self.cname_cloaking
+            && self.cname_chain_count(records) > self.cname_chain_limit as usize;
+        if truncated {
+            MetricsRegistry::increment_global(MetricName::CnameChainTruncatedTotal, 1);
+        }
+        truncated
     }
 
     /// M5.5: DNS rebinding protection — check if an A/AAAA answer
     /// points to a private/internal address.
     pub fn rebinding_detected(&self, records: &[Record]) -> bool {
-        if !self.rebinding {
-            return false;
+        let detected = if !self.rebinding {
+            false
+        } else {
+            records.iter().any(|r| match &r.data {
+                RData::A(a) => Self::is_private_or_loopback(a.0),
+                RData::AAAA(aaaa) => Self::is_private_or_loopback_aaaa(aaaa.0),
+                _ => false,
+            })
+        };
+        if detected {
+            MetricsRegistry::increment_global(MetricName::RebindingDetectedTotal, 1);
         }
-        records.iter().any(|r| match &r.data {
-            RData::A(a) => Self::is_private_or_loopback(a.0),
-            RData::AAAA(aaaa) => Self::is_private_or_loopback_aaaa(aaaa.0),
-            _ => false,
-        })
+        detected
     }
 }
 
