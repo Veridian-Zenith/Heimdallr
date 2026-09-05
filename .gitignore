@@ -1,4 +1,5 @@
 /target
+/skills
 # keep Cargo.lock for binary reproducibility (like Galdr)
 AGENTS.md
 *.swp
