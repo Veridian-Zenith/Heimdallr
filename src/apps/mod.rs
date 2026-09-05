@@ -41,7 +41,7 @@ impl Default for AppRegistry {
 /// Original Heimdallr interface; no Technitium `Apps/` `.csproj` reference.
 pub fn app_route_override(
     registry: Option<&AppRegistry>,
-    client: std::net::IpAddr,
+    _client: std::net::IpAddr,
     qname: &str,
 ) -> Option<String> {
     let reg = registry.as_ref()?;
