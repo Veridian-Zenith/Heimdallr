@@ -149,7 +149,7 @@ pub struct RecOptionsUpdate {
     pub dns64_prefix: Option<String>,
 }
 
-#[allow(dead_code, unused_variables, dead_code)]
+#[expect(dead_code, unused_variables, unused_mut)]  // M7.4 persistence resolves full RBAC + trait patterns
 async fn rec_options_update(
     State(_state): State<Arc<ApiState>>,
     _payload: axum::extract::Json<RecOptionsUpdate>,
@@ -374,7 +374,7 @@ impl Api {
             .route("/api/zones/{name}/records/{rtype}", get(get_records))
             .route("/api/zones/{name}/records/{name}/{rtype}", get(get_records))
             .route("/api/zones/{name}/records/delete", post(delete_record))
-            .route("/api/rec/options", put(rec_options_update));
+            .route("/api/rec/options", post(rec_options_update));
         // M6.5: gate `/metrics` on `[metrics].enable` (default true).
         if Api::metrics_enabled(&self.state.config) {
             app = app.route("/metrics", get(metrics_handler));
