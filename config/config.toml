@@ -1,45 +1,41 @@
+# Heimdallr Config (v0.6.5-alpha — simplified with M6.1-M6.5 features)
+# This file is managed by the web UI (M7) or edited manually (advanced).
+
+# Basic listen addresses
 listen = ["127.0.0.1:5354"]
 listen_tls = []
 listen_quic = []
 listen_https = []
 
-# Server hostname — used for default NS records, Let's Encrypt cert auto-detection
-host = "ns1.example.test."
+host = "localhost"
+# hostadmin = "admin@localhost"
 
-# Zone admin email (SOA RNAME). Default: hostadmin@<host>.
-# Stored as user@domain, converted to DNS wire format (user.domain) automatically.
-# Uncomment and change as needed:
-# hostadmin = "admin@mynetwork.test"
-
-# Zone files directory (default: /etc/heimdallr/zones)
 zones_dir = "/etc/heimdallr/zones"
 
-# TLS — auto-detects Let's Encrypt certs from /etc/letsencrypt/live/<host>/
-# Override paths manually if needed:
+# TLS (auto-detect Let's Encrypt by default)
 # [tls]
-# cert = "/path/to/fullchain.pem"
-# key = "/path/to/privkey.pem"
-# letsencrypt_dir = "/etc/letsencrypt/live"
+# cert = "/etc/letsencrypt/live/<host>/fullchain.pem"
+# key = "/etc/letsencrypt/live/<host>/privkey.pem"
 
 [resolver]
 forwarders = ["9.9.9.11:53"]
 forward_protocol = "udp"
-# QNAME minimization (RFC 9156, M5.4) — opt-in. When enabled, the forwarder
-# issues one query per label step (com. → example.com. → … → original name)
-# instead of a single full-QNAME lookup. Modes: incremental / aggressive /
-# strict. Default mode if enabled is "strict" (RFC 9156 §3.3).
-# qname_minimization.enable = false
-# qname_minimization.mode = "strict"
-# qname_minimization.max_iterations = 7
+# M5.4 — QNAME minimization (RFC 9156, opt-in, strict default)
+# qname_minimization = { enable = false, mode = "strict", max_iterations = 7 }
 qname_randomization = false
 ecs = false
 concurrency = 2
 timeout_ms = 2000
+# M5.6 — DNS64 prefix for AAAA synthesis (RFC 6052 / 6147)
+dns64_prefix = "64:ff9b::/96"
 
 [cache]
 size = 50000
 serve_stale = true
 prefetch = 2
+# M6.3 — persistent binary (JSON) cache file
+persistent = "/var/lib/heimdallr/cache.bin"
+persistent_max_age_days = 7
 
 [dnssec]
 validation = true
@@ -47,11 +43,21 @@ signing = false
 provider = "ring"
 
 [filter]
+# M6.1 — blocklists (hosts / AdGuard meta-list URLs or file paths)
 blocklists = []
+# M6.1 — allowlists (override blocklist matches)
 allowlists = []
-regex_blocklist = []
+# M6.2 — regex blocklist patterns
+regex_blocklist = [".*\\.doubleclick\\.net$"]
+# M6.1 — per-client ACL (CIDR format)
+# per_client = { "10.0.0.0/24" = { block = false } }
 cname_cloaking = true
 rebinding = true
+# M6.1 — sinkhole IPs for blocked queries
+sinkhole_v4 = "0.0.0.0"
+sinkhole_v6 = "::"
+# M6.1 — blocklist refresh interval (hours; 0 = manual only)
+refresh_interval_h = 24
 
 [proxy]
 enable = false
@@ -68,6 +74,15 @@ oidc = false
 [log]
 level = "info"
 format = "json"
+# M6.4 — PostgreSQL-backed query log (table: dns_logs; DB: dnsquerylogs; user: postgres; instance: localhost:5432 / /var/lib/postgres/data)
+query_log = "/var/lib/heimdallr/query_log.jsonl"
+postgres_url = "postgresql://postgres@localhost:5432/dnsquerylogs"
+# M6.5 — Prometheus metrics endpoint (top-level [metrics] block; default endpoint=/metrics, format=openmetrics)
+# metrics = { enable = true, endpoint = "/metrics", format = "openmetrics" }
+
+[dns64]
+prefix = "64:ff9b::/96"
+always_synthesize = false
 
 [dhcp]
 enable = false

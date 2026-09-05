@@ -52,6 +52,12 @@ pub struct Config {
     pub zones: Vec<ZoneConfig>,
     #[serde(default = "default_zones_dir")]
     pub zones_dir: String,
+    /// M6.5 — Metrics (Prometheus / OpenMetrics) config.
+    #[serde(default)]
+    pub metrics: MetricsConfig,
+    /// M5.6 / M6 — DNS64 prefix config.
+    #[serde(default)]
+    pub dns64: Dns64Config,
 }
 
 fn default_host() -> String {
@@ -190,12 +196,21 @@ pub struct CacheConfig {
     pub prefetch: u8,
     #[serde(default)]
     pub persistent: Option<String>,
+    /// M6.3: maximum age in days for a persistent cache load. Files older
+    /// than this are skipped on load (treated like a fresh start) so a
+    /// stale snapshot doesn't poison a long-down server's view of DNS.
+    /// Default: 7 days.
+    #[serde(default = "default_persistent_max_age_days")]
+    pub persistent_max_age_days: u64,
 }
 fn default_cache_size() -> usize {
     50_000
 }
 fn default_prefetch() -> u8 {
     2
+}
+fn default_persistent_max_age_days() -> u64 {
+    7
 }
 impl Default for CacheConfig {
     fn default() -> Self {
@@ -204,6 +219,7 @@ impl Default for CacheConfig {
             serve_stale: true,
             prefetch: default_prefetch(),
             persistent: None,
+            persistent_max_age_days: default_persistent_max_age_days(),
         }
     }
 }
@@ -423,6 +439,46 @@ pub struct ClusterConfig {
     pub peers: Vec<String>,
 }
 
+// ── M6.4 / M6.5 — Query Log + Metrics Config ──────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetricsConfig {
+    /// Prometheus /metrics endpoint enabled (default true for M6.5).
+    #[serde(default = "default_true")]
+    pub enable: bool,
+    /// Metrics endpoint path (default `/metrics`).
+    #[serde(default = "default_metrics_endpoint")]
+    pub endpoint: String,
+    /// Metrics format (default `openmetrics`).
+    #[serde(default = "default_metrics_format")]
+    pub format: String,
+}
+impl Default for MetricsConfig {
+    fn default() -> Self {
+        Self {
+            enable: true,
+            endpoint: default_metrics_endpoint(),
+            format: default_metrics_format(),
+        }
+    }
+}
+fn default_metrics_endpoint() -> String {
+    "/metrics".into()
+}
+fn default_metrics_format() -> String {
+    "openmetrics".into()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Dns64Config {
+    /// DNS64 prefix (e.g. `64:ff9b::/96`).
+    #[serde(default)]
+    pub prefix: Option<String>,
+    /// Always synthesize AAAA even if upstream returns real AAAA (testing only).
+    #[serde(default)]
+    pub always_synthesize: bool,
+}
+
 // ── Zones ─────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -620,6 +676,8 @@ impl Default for Config {
             api: ApiConfig::default(),
             auth: AuthConfig::default(),
             log: LogConfig::default(),
+            metrics: MetricsConfig::default(),
+            dns64: Dns64Config::default(),
             dhcp: DhcpConfig::default(),
             cluster: ClusterConfig::default(),
             zones: vec![],

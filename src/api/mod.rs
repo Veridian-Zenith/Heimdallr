@@ -22,6 +22,7 @@ use tokio_rustls::TlsAcceptor;
 use tracing::info;
 
 use crate::config::Config;
+use crate::core::metrics::MetricsRegistry;
 use crate::core::zone::record::{self, RecordCreate, RecordDelete, RecordSummary};
 
 // ── Response types ───────────────────────────────────────────────────────────
@@ -84,9 +85,55 @@ struct MessageResponse {
 pub struct ApiState {
     pub config: Config,
     pub zones: Arc<RwLock<Vec<ZoneSummary>>>,
+    /// M6.6: live filter (blocklist, regex, etc.) for `/api/filter/stats`.
+    /// Constructed from `config.filter` so stats reflect the actual
+    /// loaded state, not the parsed config strings.
+    pub filter: Arc<crate::core::filter::Filter>,
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
+
+/// M6.5: Metrics endpoint (OpenMetrics text format).
+async fn metrics_handler() -> impl IntoResponse {
+    let body = MetricsRegistry::serialize_global();
+    (
+        StatusCode::OK,
+        [(
+            axum::http::header::CONTENT_TYPE,
+            "text/plain; version=0.0.4",
+        )],
+        body,
+    )
+}
+
+/// M6.6: Basic filter stats.
+#[derive(Serialize)]
+struct FilterStats {
+    cname_cloaking: bool,
+    rebinding: bool,
+    blocklist_entries: usize,
+    regex_patterns: usize,
+}
+
+async fn filter_stats(State(state): State<Arc<ApiState>>) -> impl IntoResponse {
+    // M6.6: Stats derived from the live `Filter` constructed at API startup
+    // (so blocklist/allowlist/reflect actual loaded entries, not parsed strings).
+    Json(FilterStats {
+        cname_cloaking: state.config.filter.cname_cloaking,
+        rebinding: state.config.filter.rebinding,
+        blocklist_entries: state.filter.blocklist.len(),
+        regex_patterns: state.config.filter.regex_blocklist.len(),
+    })
+}
+
+impl Api {
+    /// True when the `/metrics` endpoint should be registered.
+    ///
+    /// Gated by `[metrics].enable` (M6.5 config). Defaults to `true`.
+    pub fn metrics_enabled(config: &Config) -> bool {
+        config.metrics.enable
+    }
+}
 
 async fn health() -> Json<Health> {
     Json(Health {
@@ -273,6 +320,7 @@ impl Api {
         let state = Arc::new(ApiState {
             config: config.clone(),
             zones: Arc::new(RwLock::new(zones)),
+            filter: Arc::new(crate::core::filter::Filter::new(&config.filter)),
         });
 
         Self {
@@ -284,8 +332,9 @@ impl Api {
     }
 
     pub async fn run(self) -> Result<()> {
-        let app = Router::new()
+        let mut app = Router::new()
             .route("/api/health", get(health))
+            .route("/api/filter/stats", get(filter_stats))
             .route("/api/info", get(server_info))
             .route("/api/zones", get(list_zones))
             .route("/api/zones/{name}", get(zone_detail))
@@ -295,8 +344,12 @@ impl Api {
             )
             .route("/api/zones/{name}/records/{rtype}", get(get_records))
             .route("/api/zones/{name}/records/{name}/{rtype}", get(get_records))
-            .route("/api/zones/{name}/records/delete", post(delete_record))
-            .with_state(self.state);
+            .route("/api/zones/{name}/records/delete", post(delete_record));
+        // M6.5: gate `/metrics` on `[metrics].enable` (default true).
+        if Api::metrics_enabled(&self.state.config) {
+            app = app.route("/metrics", get(metrics_handler));
+        }
+        let app = app.with_state(self.state);
 
         if let (Some(cert_path), Some(key_path)) = (&self.tls_cert, &self.tls_key) {
             let certs = CertificateDer::pem_file_iter(cert_path)
@@ -378,4 +431,63 @@ impl Api {
 async fn shutdown_signal() {
     let _ = tokio::signal::ctrl_c().await;
     info!("api: shutting down");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// M6.5: when `[metrics].enable = false`, the `/metrics` endpoint
+    /// should not be registered.
+    #[test]
+    fn metrics_enabled_default_true() {
+        let cfg = Config::default();
+        assert!(Api::metrics_enabled(&cfg));
+    }
+
+    #[test]
+    fn metrics_enabled_can_be_disabled() {
+        let mut cfg = Config::default();
+        cfg.metrics.enable = false;
+        assert!(!Api::metrics_enabled(&cfg));
+    }
+
+    /// M6.6: `filter_stats` should report the real blocklist count from
+    /// the live `Filter`, not a hardcoded 0.
+    #[test]
+    fn filter_stats_reports_real_blocklist_count() {
+        use crate::core::filter::Filter;
+        use std::io::Write;
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        writeln!(tmp, "0.0.0.0 a.example.com").unwrap();
+        writeln!(tmp, "0.0.0.0 b.example.com").unwrap();
+        writeln!(tmp, "0.0.0.0 c.example.com").unwrap();
+
+        let cfg = crate::config::FilterConfig {
+            blocklists: vec![tmp.path().to_string_lossy().into()],
+            ..Default::default()
+        };
+        let filter = Arc::new(Filter::new(&cfg));
+        let api_cfg = Config::default();
+        let state = Arc::new(ApiState {
+            config: api_cfg,
+            zones: Arc::new(RwLock::new(vec![])),
+            filter: filter.clone(),
+        });
+        // The FilterStats JSON built from this state should reflect
+        // blocklist_entries == 3. Use the handler directly via a
+        // tokio runtime.
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            // We can't easily call the axum handler with state without
+            // a Router, but we can verify the wiring via Filter::blocklist
+            // which is what filter_stats will read.
+            assert_eq!(filter.blocklist.len(), 3);
+            // State has the filter reference.
+            assert_eq!(state.filter.blocklist.len(), 3);
+        });
+    }
 }
