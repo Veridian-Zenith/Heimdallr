@@ -149,7 +149,7 @@ pub struct RecOptionsUpdate {
     pub dns64_prefix: Option<String>,
 }
 
-#[expect(dead_code, unused_variables, unused_mut)]  // M7.4 persistence resolves full RBAC + trait patterns
+#[expect(dead_code, unused_variables, unused_mut)] // M7.4 persistence resolves full RBAC + trait patterns
 async fn rec_options_update(
     State(_state): State<Arc<ApiState>>,
     _payload: axum::extract::Json<RecOptionsUpdate>,
