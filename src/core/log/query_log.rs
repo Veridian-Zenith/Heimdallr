@@ -1,3 +1,4 @@
+#![allow(unused_variables, dead_code)]
 // SPDX-License-Identifier: OSL-3.0
 // Copyright (c) 2026 Veridian Zenith
 
