@@ -159,3 +159,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 *See [README.md](README.md) for milestone roadmap and [plans/m5_tracking.md](plans/m5_tracking.md) for sub-task landing plan.*
 *License: [OSL-3.0](LICENSE) — network use counts as distribution.*
+
+### Added (M7.3 — Runtime Toggle Endpoint + M7.4 Persistence Follow-up)
+- `src/api/mod.rs`: `PUT /api/rec/options` endpoint (`RecOptionsUpdate`); auth gate (`auth.totp` or `auth.oidc` required) — full RBAC role verification (`dns_admin`) in M7.4 follow-up.
+- `src/auth/mod.rs`: `AuthConfig` + `AuthSession` (stub); `dns_admin` role test (`auth_rbac_dns_admin_role`).
+- Config persistence mechanism (`Config::from_file` → TOML write) demonstrated; full persistence wired as M7.4 follow-up when persistence design finalized.
+- `README.md`: `v0.7.3-alpha` status line; M7.3 endpoint noted.
+- `plans/m7_design.md`: M7 milestone design stub created (`Apps`/geo/auth/web console/split-horizon).
