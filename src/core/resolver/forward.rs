@@ -67,6 +67,14 @@ pub struct CacheForwardAuthority {
     filter: crate::core::filter::Filter,
     /// M5.6: DNS64 prefix (RFC 6052/6147) for AAAA synthesis. None = off.
     dns64_prefix: Option<crate::core::resolver::dns64::Dns64Prefix>,
+    /// M5.6: When true, synthesize AAAA from A even if upstream returned
+    /// real AAAA records. Default false (only synthesize when upstream
+    /// returned no AAAA). Wired to top-level `[dns64].always_synthesize`.
+    dns64_always_synthesize: bool,
+    /// M5.7: ECS (Extended Client Subnet) enabled — controls whether the
+    /// `client_subnet` is extracted from the request info for cache key
+    /// partitioning. Default off (opt-in, per RFC 7871).
+    ecs: bool,
 }
 
 impl CacheForwardAuthority {
@@ -79,6 +87,33 @@ impl CacheForwardAuthority {
         filter: crate::core::filter::Filter,
         dns64_prefix: Option<crate::core::resolver::dns64::Dns64Prefix>,
     ) -> Self {
+        Self::with_dns64_always_synthesize(
+            origin,
+            resolver,
+            cache,
+            dnssec_enabled,
+            qname_minimization,
+            filter,
+            dns64_prefix,
+            false,
+            false,
+        )
+    }
+
+    /// Constructor that also accepts the `dns64.always_synthesize` flag.
+    /// Used by `Net::build_cache_forwarder` once DNS64 config is read.
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_dns64_always_synthesize(
+        origin: LowerName,
+        resolver: HickoryResolver<TokioRuntimeProvider>,
+        cache: SharedCache,
+        dnssec_enabled: bool,
+        qname_minimization: ResolverQnameMinimization,
+        filter: crate::core::filter::Filter,
+        dns64_prefix: Option<crate::core::resolver::dns64::Dns64Prefix>,
+        dns64_always_synthesize: bool,
+        ecs: bool,
+    ) -> Self {
         Self {
             origin,
             resolver,
@@ -87,6 +122,8 @@ impl CacheForwardAuthority {
             qname_minimization,
             filter,
             dns64_prefix,
+            dns64_always_synthesize,
+            ecs,
         }
     }
 
@@ -111,7 +148,7 @@ impl CacheForwardAuthority {
             // Check cache first
             {
                 let mut cache = self.cache.write().await;
-                if let Some((bytes, _stale, hits)) = cache.lookup(&key) {
+                if let Some((bytes, _stale, hits)) = cache.lookup_with_metrics(&key) {
                     debug!("RFC 8482:ANY cache hit {qname} {rtype} (hits={hits})");
                     if let Ok(msg) = Message::from_vec(&bytes) {
                         let records: Vec<Record> = msg.answers.to_vec();
@@ -206,10 +243,8 @@ impl ZoneHandler for CacheForwardAuthority {
 
         let qname = name.to_utf8();
         // M5.7: ECS cache key partition — extract client subnet scope if present
-        // in the request. Disabled (None) when `resolver.ecs = false`.
-        let client_subnet = if self.qname_minimization.enable {
-            // qname_minimization is reused as a proxy for resolver.ecs config
-            // here only as a placeholder; full ECS toggle is wired in M5.7 follow-up.
+        // in the request. Wired to `ecs` (opt-in, off by default, per RFC 7871).
+        let client_subnet = if self.ecs {
             extract_ecs_scope(request_info)
         } else {
             None
@@ -223,7 +258,7 @@ impl ZoneHandler for CacheForwardAuthority {
         // 1. Check cache
         {
             let mut cache = self.cache.write().await;
-            if let Some((bytes, _stale, hits)) = cache.lookup(&key) {
+            if let Some((bytes, _stale, hits)) = cache.lookup_with_metrics(&key) {
                 debug!("cache hit: {qname} {rtype} (hits={hits})");
 
                 // Prefetch: if TTL is low relative to hit count, spawn background
@@ -316,16 +351,21 @@ impl ZoneHandler for CacheForwardAuthority {
         // M5.6: DNS64 synthesis (RFC 6147). If the query was AAAA, upstream
         // returned NoError with no AAAA answers, and a DNS64 prefix is
         // configured, perform a chained A query and synthesize AAAA from
-        // the A answers + prefix. This is the M5.4-follow-up integration
-        // described in the design doc.
+        // the A answers + prefix. Synthesized AAAA records are appended
+        // to the answer section so they reach the client AND get cached.
+        let mut dns64_synthesized: Vec<Record> = Vec::new();
         if rtype == RecordType::AAAA
             && let Some(prefix) = self.dns64_prefix
         {
-            let has_aaaa = lookup
+            let upstream_aaaa = lookup
                 .answers()
                 .iter()
                 .any(|r| r.record_type() == RecordType::AAAA);
-            if !has_aaaa {
+            // `always_synthesize` (top-level [dns64]) overrides the empty-AAAA
+            // gate. Default is false (only synthesize when upstream returned
+            // nothing) — preserves the typical DNS64 behaviour.
+            let do_synth = !upstream_aaaa || self.dns64_always_synthesize;
+            if do_synth {
                 debug!("dns64: AAAA empty, performing chained A query for {fwd_name}");
                 let mut a_fwd = fwd_name.clone();
                 a_fwd.set_fqdn(false);
@@ -348,11 +388,26 @@ impl ZoneHandler for CacheForwardAuthority {
                             "dns64: synthesized {} AAAA records for {fwd_name}",
                             aaaa_list.len()
                         );
-                        // Synthesis is informational here; the lookup result
-                        // (which may be NoError + empty) is what we return.
-                        // Full response mutation (adding synthesized AAAA to
-                        // the answer section) is a follow-up that requires
-                        // building a new Message with the synthesized records.
+                        // Convert synthesized AAAA wrappers to proper hickory
+                        // Records so they can ride on the response Message.
+                        // TTL: borrow the minimum A TTL (already what the
+                        // answer section would carry), name = original query.
+                        let min_a_ttl = a_lookup
+                            .answers()
+                            .iter()
+                            .filter_map(|r| match r.record_type() {
+                                RecordType::A => Some(r.ttl),
+                                _ => None,
+                            })
+                            .min()
+                            .unwrap_or(300);
+                        for synth in &aaaa_list {
+                            dns64_synthesized.push(Record::from_rdata(
+                                fwd_name.clone(),
+                                min_a_ttl,
+                                RData::AAAA(synth.0.into()),
+                            ));
+                        }
                     }
                 }
             }
@@ -363,6 +418,11 @@ impl ZoneHandler for CacheForwardAuthority {
         // chain before caching. Also disable QNAME minimization for DNAME
         // interactions per RFC 9156 §2.2 last paragraph.
         let mut records: Vec<Record> = lookup.answers().to_vec();
+        // Append DNS64 synthesized AAAA records (RFC 6147) to the answer
+        // section so they reach the client and get cached. This is the
+        // M5.6→M6.5 fix: previously the synth records were computed and
+        // discarded; now they ride the response.
+        records.extend(dns64_synthesized.iter().cloned());
         let has_dname = records.iter().any(|r| r.record_type() == RecordType::ANAME);
         if has_dname {
             // M5.3: enforce DNAME/CNAME co-existence rule at lookup time.
@@ -456,7 +516,16 @@ impl ZoneHandler for CacheForwardAuthority {
             records.extend(synthesized_aaaa);
         }
 
-        LookupControlFlow::Continue(Ok(AuthLookup::from(lookup)))
+        LookupControlFlow::Continue(if !dns64_synthesized.is_empty() {
+            // M5.6/M6.5: rebuild AuthLookup from the extended `records`
+            // so the synthesized AAAA records actually appear in the
+            // response (the original `lookup` doesn't know about them).
+            let query = Query::query(fwd_name.clone(), rtype);
+            let lookup = hickory_resolver::lookup::Lookup::new_with_max_ttl(query, records.clone());
+            Ok(AuthLookup::from(lookup))
+        } else {
+            Ok(AuthLookup::from(lookup))
+        })
     }
 
     async fn search(

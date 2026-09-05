@@ -34,12 +34,21 @@ impl Dns64Prefix {
 
 /// M5.6: Synthesize AAAA records from A records using the DNS64 prefix.
 /// Returns an empty Vec if the prefix is invalid for the given address.
+///
+/// M6.5: bumps the global `dns64_synthesized_total` counter by the number
+/// of AAAA records actually produced.
 pub fn synthesize_aaaa(a_records: &[A], prefix: Dns64Prefix) -> Vec<AAAA> {
     let mut out = Vec::with_capacity(a_records.len());
     for a in a_records {
         if let Some(v6) = synthesize_one(a.0, prefix) {
             out.push(AAAA(v6));
         }
+    }
+    if !out.is_empty() {
+        crate::core::metrics::MetricsRegistry::increment_global(
+            crate::core::metrics::MetricName::Dns64SynthesizedTotal,
+            out.len() as u64,
+        );
     }
     out
 }
@@ -144,5 +153,49 @@ mod tests {
     fn parse_invalid_prefix() {
         assert!(Dns64Prefix::parse("not-a-prefix").is_none());
         assert!(Dns64Prefix::parse("64:ff9b::/200").is_none());
+    }
+
+    // ── M6.5 metric wiring test ──────────────────────────────────────
+
+    /// Each call to `synthesize_aaaa` should bump the global
+    /// `dns64_synthesized_total` counter by the number of synthesized
+    /// records (one per A record, when the prefix supports it).
+    #[test]
+    fn synth_bumps_dns64_synthesized_total() {
+        use crate::core::metrics::{MetricName, MetricsRegistry};
+        let prefix = Dns64Prefix::parse("64:ff9b::/96").unwrap();
+        let a_list = vec![
+            A(Ipv4Addr::new(192, 0, 2, 1)),
+            A(Ipv4Addr::new(192, 0, 2, 2)),
+        ];
+        let before = MetricsRegistry::read_global(MetricName::Dns64SynthesizedTotal);
+        let result = synthesize_aaaa(&a_list, prefix);
+        let after = MetricsRegistry::read_global(MetricName::Dns64SynthesizedTotal);
+        assert_eq!(result.len(), 2);
+        // Delta check: concurrent tests may share the counter, so we
+        // assert what THIS test added, not the absolute value.
+        assert_eq!(
+            after - before,
+            2,
+            "dns64_synthesized_total must bump by records synthesized"
+        );
+    }
+
+    /// Unsupported prefix length (e.g. /56) yields zero synth records
+    /// and must NOT bump the counter.
+    #[test]
+    fn synth_unsupported_prefix_does_not_bump_metric() {
+        use crate::core::metrics::{MetricName, MetricsRegistry};
+        let prefix = Dns64Prefix::parse("64:ff9b::/56").unwrap();
+        let a_list = vec![A(Ipv4Addr::new(192, 0, 2, 1))];
+        let before = MetricsRegistry::read_global(MetricName::Dns64SynthesizedTotal);
+        let result = synthesize_aaaa(&a_list, prefix);
+        let after = MetricsRegistry::read_global(MetricName::Dns64SynthesizedTotal);
+        assert!(result.is_empty());
+        assert_eq!(
+            after - before,
+            0,
+            "unsupported prefix must not bump counter"
+        );
     }
 }

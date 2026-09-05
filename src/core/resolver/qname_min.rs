@@ -210,6 +210,14 @@ pub async fn resolve_with_minimization<R: QnameMinResolver>(
         }
     }
 
+    // M6.5: bump the global `qmin_steps_total` counter by the number of
+    // peel steps actually issued (matches `steps_taken` reported in the
+    // result). The fallback below bumps it again if it fires.
+    crate::core::metrics::MetricsRegistry::increment_global(
+        crate::core::metrics::MetricName::QminStepsTotal,
+        u64::from(steps_taken),
+    );
+
     if last_records.is_empty() {
         // Total failure across all minimization steps — fall back to
         // a single unminimized query per RFC 9156 §3.4.
@@ -225,6 +233,12 @@ pub async fn resolve_with_minimization<R: QnameMinResolver>(
                 return Err(last_error.unwrap_or(e));
             }
         };
+        // M6.5: the fallback query is itself one extra step in the
+        // operator-visible cost. Count it.
+        crate::core::metrics::MetricsRegistry::increment_global(
+            crate::core::metrics::MetricName::QminStepsTotal,
+            1,
+        );
         return Ok(QnameMinResult {
             records,
             final_qname: original,
@@ -510,5 +524,78 @@ mod tests {
         assert!(!cfg.enable, "M5.4 default must be opt-in (off)");
         assert_eq!(cfg.mode, crate::config::QnameMinMode::Strict);
         assert!(cfg.max_iterations > 0);
+    }
+
+    // ── M6.5 metric wiring tests ──────────────────────────────────────
+
+    /// Each peel step the driver issues bumps the global
+    /// `qmin_steps_total` counter by 1. No fallback in this scenario.
+    #[tokio::test]
+    async fn qmin_steps_total_bumped_per_peel_step() {
+        use crate::core::metrics::{MetricName, MetricsRegistry};
+        let full = n("a.b.example.com.");
+        let mock = SeqMock::new(vec![
+            (
+                full.clone(),
+                RecordType::A,
+                Ok(vec![a_record(&full, [10, 0, 0, 1])]),
+            ),
+            (n("b.example.com."), RecordType::A, Ok(vec![])),
+            (n("example.com."), RecordType::A, Ok(vec![])),
+            (n("com."), RecordType::A, Ok(vec![])),
+        ]);
+        let cfg = ResolverQnameMinimization {
+            enable: true,
+            max_iterations: 7,
+            ..Default::default()
+        };
+        let before = MetricsRegistry::read_global(MetricName::QminStepsTotal);
+        let _ = resolve_with_minimization(&mock, full, RecordType::A, &cfg)
+            .await
+            .expect("success");
+        let after = MetricsRegistry::read_global(MetricName::QminStepsTotal);
+        // The driver issues min(max_iterations, labels.len()) peel steps
+        // regardless of whether a step produced a hit. Use a delta check
+        // since the global counter accumulates across all qmin tests.
+        let delta = after - before;
+        assert!(
+            delta >= 1,
+            "qmin_steps_total must increment (delta={delta})"
+        );
+    }
+
+    /// When the peel path falls back to a full QNAME, the fallback
+    /// counts as one additional step on top of the peel steps.
+    #[tokio::test]
+    async fn qmin_steps_total_counts_fallback() {
+        use crate::core::metrics::{MetricName, MetricsRegistry};
+        let full = n("z.example.com.");
+        let mock = SeqMock::new(vec![
+            (n("z.example.com."), RecordType::A, Ok(vec![])),
+            (n("example.com."), RecordType::A, Ok(vec![])),
+            (
+                full.clone(),
+                RecordType::A,
+                Ok(vec![a_record(&full, [10, 0, 0, 3])]),
+            ),
+        ]);
+        let cfg = ResolverQnameMinimization {
+            enable: true,
+            max_iterations: 2,
+            ..Default::default()
+        };
+        let before = MetricsRegistry::read_global(MetricName::QminStepsTotal);
+        let r = resolve_with_minimization(&mock, full, RecordType::A, &cfg)
+            .await
+            .expect("success");
+        assert!(r.fell_back);
+        let after = MetricsRegistry::read_global(MetricName::QminStepsTotal);
+        // 2 peel steps + 1 fallback = 3 increments. Use a delta check
+        // since the global counter accumulates across all qmin tests.
+        assert!(
+            after - before >= 3,
+            "qmin_steps_total must increment by at least 3 (before={before}, after={after}, delta={})",
+            after - before
+        );
     }
 }
