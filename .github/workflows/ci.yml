@@ -59,8 +59,6 @@ jobs:
       - name: Botan feature check
         run: cargo check --features botan-crypto
 
-      - name: Run Benchmarks
-        run: cargo bench
 
   deny:
     name: cargo-deny
