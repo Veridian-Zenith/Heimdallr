@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
 /// Cache key: (qname lowercase, qtype, optional client-subnet scope for ECS M5.7).
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct CacheKey {
     pub qname: String,
     pub qtype: u16,
@@ -212,6 +212,47 @@ impl Cache {
             }
             None => false,
         }
+    }
+
+    /// M6.3: Save cache to binary file at `path`.
+    pub fn save_to_file(&self, path: &str) -> std::io::Result<()> {
+        let snapshot: Vec<(CacheKey, Vec<u8>, u64, u64)> = self
+            .entries
+            .iter()
+            .map(|(k, e)| {
+                (
+                    k.clone(),
+                    e.response_bytes.clone(),
+                    e.original_ttl.as_secs(),
+                    e.hit_count,
+                )
+            })
+            .collect();
+        let encoded = serde_json::to_string(&snapshot)
+            .map_err(|e| std::io::Error::other(format!("serde_json: {e}")))?;
+        std::fs::write(path, encoded)
+    }
+
+    /// M6.3: Load cache from binary file at `path`.
+    #[allow(clippy::type_complexity)]
+    pub fn load_from_file(path: &str) -> std::io::Result<Self> {
+        let text = std::fs::read_to_string(path)?;
+        let snapshot: Vec<(CacheKey, Vec<u8>, u64, u64)> = serde_json::from_str(&text)
+            .map_err(|e| std::io::Error::other(format!("serde_json: {e}")))?;
+        let mut cache = Self::new(CacheConfig {
+            size: snapshot.len().max(100),
+            serve_stale: Duration::from_secs(30),
+            prefetch: 0,
+        });
+        for (key, response_bytes, ttl_sec, hit_count) in snapshot {
+            let k = key.clone();
+            cache.insert(key, response_bytes, Duration::from_secs(ttl_sec));
+            // Restore hit count (approximate, since insert resets it)
+            if let Some(entry) = cache.entries.get_mut(&k) {
+                entry.hit_count = hit_count;
+            }
+        }
+        Ok(cache)
     }
 
     /// Clear all entries.

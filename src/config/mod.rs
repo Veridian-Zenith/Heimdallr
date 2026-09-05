@@ -253,6 +253,19 @@ pub struct FilterConfig {
     pub rebinding: bool,
     #[serde(default = "default_cname_chain_limit")]
     pub cname_chain_limit: Option<u8>,
+    /// M6.1: IPv4 sinkhole address returned for blocked A queries.
+    #[serde(default = "default_sinkhole_v4")]
+    pub sinkhole_v4: String,
+    /// M6.1: IPv6 sinkhole address returned for blocked AAAA queries.
+    #[serde(default = "default_sinkhole_v6")]
+    pub sinkhole_v6: String,
+}
+
+fn default_sinkhole_v4() -> String {
+    "0.0.0.0".into()
+}
+fn default_sinkhole_v6() -> String {
+    "::".into()
 }
 
 impl Default for FilterConfig {
@@ -265,6 +278,8 @@ impl Default for FilterConfig {
             cname_cloaking: default_true(),
             rebinding: default_true(),
             cname_chain_limit: default_cname_chain_limit(),
+            sinkhole_v4: default_sinkhole_v4(),
+            sinkhole_v6: default_sinkhole_v6(),
         }
     }
 }

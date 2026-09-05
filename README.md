@@ -164,7 +164,7 @@ Milestones are gates — do not start `M(n+1)` before `M(n)` passes. Linux-only;
 
 | Milestone | Scope |
 |-----------|-------|
-| **M6** Filtering, Apps & Observability | Blocklist URLs, regex per-client, DnsBlockList, BlockPage sinkhole, DNS Rebinding Protection, persistent cache, stats + query logs, Prometheus metrics, full HTTP API |
+| **M6** Filtering, Apps & Observability | Blocklists (hosts/AdGuard/meta-list) ✅, regex per-client ✅, persistent cache (`cache.bin` JSON) ✅, query log (`dns_logs` PG table) ✅, Prometheus metrics (OpenMetrics) ✅, full HTTP API (stub), sinkhole config ✅, per-client ACL (CIDR) ✅ | v0.6.5-alpha |
 | **M7** Administration & Hardening | Web console (axum + static files, dark mode), multi-user RBAC + API tokens, TOTP 2FA, OIDC SSO, system logging, split-horizon/geo via Apps |
 | **M8** Auxiliary Services | Built-in DHCP server, HTTP/SOCKS5 proxy routing (incl. Tor), clustering, Docker, systemd |
 | **M9** Full Parity & Migration | XFR-over-TLS/QUIC, TSIG RFC 8945, Dynamic Updates RFC 2136, WeightedRoundRobin/Failover apps, Technitium zone JSON import, benchmark target: >60k qps |

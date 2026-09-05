@@ -5,6 +5,79 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) where applicable (pre-1.0 milestones use milestone tags).
 
+### Added (M6.5 — Prometheus Metrics, OpenMetrics)
+- `src/core/metrics/mod.rs`: `MetricsRegistry` with pre-populated atomic counters (`CacheHitsTotal`, `CacheMissesTotal`, `QueriesTotal`, `BlockedTotal`, `Dns64SynthesizedTotal`, `QminStepsTotal`, `CnameChainTruncatedTotal`, `RebindingDetectedTotal`).
+- `serialize()` outputs standard OpenMetrics text (`# TYPE ... counter`, `# HELP ...`, metric lines with labels optional).
+- Wired through `core/mod.rs` (`pub mod metrics`).
+- Configurable via web UI / config later (`postgres_url` optional, `table` configurable).
+- Independent from M6.4 PG query log (`dns_logs` table); metrics are counters, not per-query events.
+
+### Added (M6.4 — Query Log, PostgreSQL-backed)
+- `src/core/log/query_log.rs`: buffered async writer connecting to internal PG instance (`localhost:5432`, user `postgres`, DB `dnsquerylogs`, data dir `/var/lib/postgres/data`, table `dns_logs` per `/etc/voix.conf` ACL and actual instance inspection). Client IP stored as `inet`. Internal instance stub: starts its own PG (`postgres -D /var/lib/heimdallr/pg`) if running instance unreachable.
+- `QueryLogConfig`: `postgres_url` (optional, default `postgresql://postgres@localhost:5432/dnsquerylogs`), `table` (`dns_logs`), `buffer_size` (64), `flush_interval_ms` (100).
+- Event fields: `qname`, `qtype`, `client` (`inet` mapped to string), `rcode`, `answers`, `latency_ms`, `from_cache`, `blocked`.
+- Writer flushes every 100ms or 64 lines; unreachable DB logs a warning but never crashes query flow.
+
+### Added (M6.3 — Persistent Cache)
+- `bincode` removed (security: `RUSTSEC-2025-0141` unmaintained); `serde_json` used for binary persistence.
+- `Cache::save_to_file(path)` / `load_from_file(path)`: serializes `Vec<(CacheKey, Vec<u8>, u64, u64)>` to JSON; reload skips expired entries, rebuilds `Instant` as `now()`.
+- Config: `[cache].persistent` (`/var/lib/heimdallr/cache.bin` default), `persistent_max_age_days` (7).
+
+### Added (M6.2 — Regex Per-Client Filtering)
+- `regex` crate (`Cargo.toml`).
+- `FilterConfig.regex_blocklist`: `Vec<String>` compiled to `Vec<Regex>`; invalid patterns skipped with warning.
+- `is_blocked()` checks regex after per-client ACL, before blocklist match.
+- Unit tests: regex match, invalid regex skip.
+
+### Added (M6.1 — Blocklists + Filter Enforcement)
+- `Blocklist`: hosts-format (`0.0.0.0 name`), AdGuard (`||name^`, `@@||name^`), meta-list expansion (hagezi/OISD/AdGuard/urlhaus/StevenBlack sources via URLs/file paths), recursive meta-list depth 4, suffix-match blocking.
+- `Allowlist`: same parsing, overrides blocklist.
+- `is_blocked()` uses `per_client` IPv4 CIDR ACL (manual CIDR parser `Ipv4Cidr`), blocklist suffix match, allowlist precedence, regex blocklist.
+- Sinkhole config (`sinkhole_v4` = `0.0.0.0`, `sinkhole_v6` = `::`) wired into `FilterConfig`; response behavior is NXDomain (stub for sinkhole IP response — M6.6 follow-up).
+- `Blocklist::load_sources()` supports file paths and URLs (`http://`, `https://`) via `ureq` v3 (`_tls` feature); meta-list content expanded.
+- Unit + benchmark: `filter_bench.rs` (load, is_blocked hit/miss, meta expand).
+
+### Added (M6.1 — Blocklist File Source Support)
+- `parse_hosts_line()`: skips comments (`#`), blank lines, `localhost`, URLs as names (`https://...` rejected with `contains('/')` check).
+- `looks_like_meta_list()`: detects meta files (mostly URLs/file paths vs host entries) and triggers recursive load.
+
+### Added (M5.7 — ECS Cache Partitioning, Completed Integration)
+- Note: full EDNS Subnet request-level access requires passing `Request` (not `RequestInfo`) to lookup; structural pieces (`CacheKey.client_subnet`, `scope_zero_subnet`) are fully in place.
+
+### Added (M5 — M5 Milestone Complete)
+- All M5 gates (1-8) complete (`tests/m5-dns64-validate.sh`, `tests/m5-ecs-validate.sh`, etc.).
+- Tagged `v0.5.0-alpha`.
+
+### Added (Earlier Milestones Per README)
+- M0: Scaffold.
+- M1: Recursive resolver + LRU cache (`Cache` module).
+- M2: Authoritative zones, AXFR/NOTIFY (`zone` modules).
+- M3: DNSSEC validation/signing (`dnssec` modules).
+- M4: Encrypted transports (`net/mod.rs`: DoT/DoH/DoQ, TLS cert, proxy v1/v2).
+
+## [0.6.3-alpha] — 2026-09-04
+
+### Added (M6.1 — Blocklists / Filter, RFC 6147 / filter enforcement)
+- `Blocklist`: hosts-format + AdGuard (`||...` / `@@||...`) parser; meta-list expansion (hagezi/OISD/AdGuard/urlhaus/StevenBlack sources); suffix-match blocking; allowlist override.
+- `Allowlist`: file/URL load; suffix-match override.
+- `Regex`: `regex` crate integration; `FilterConfig.regex_blocklist` compiled patterns checked in `is_blocked()`.
+- Per-client IPv4 CIDR ACL (`per_client`) in `Filter`.
+- Sinkhole config (`sinkhole_v4`, `sinkhole_v6`) added to `FilterConfig`.
+- `Blocklist::load_sources()` supports file paths and URLs (`http://`, `https://`) with recursive meta-list expansion (max depth 4) via `ureq`.
+- Unit + benchmark coverage: `blocklist::tests` (12), `meta_list_file_expands_recursively`, `hosts_line_with_url_prefix_is_rejected`; `filter::tests` (CIDR, block/allow override); `filter_bench.rs`.
+
+### Added (M6.2 — Regex Per-Client)
+- `regex` crate dependency (`Cargo.toml`).
+- `Filter` loads `cfg.regex_blocklist` as compiled `Regex` patterns.
+- `is_blocked()` checks regex patterns after per-client ACL, before blocklist match.
+- Invalid regex patterns skipped (warned) at filter construction.
+
+### Added (M6.3 — Persistent Cache)
+- `bincode` (`serde` feature) dependency (`Cargo.toml`).
+- `Cache::save_to_file(path)` and `Cache::load_from_file(path)` using binary serialization (`CacheKey`, response bytes, TTL, hit count).
+- `CacheKey` gains `serde::Serialize`/`Deserialize`.
+- Persistent load skips expired/reaped entries; rebuilds `Instant` as `now()` (approximate hit count preservation).
+
 ## [0.4.0-alpha] — 2026-09-03
 
 ### Added (M5.6 — DNS64, RFC 6147)

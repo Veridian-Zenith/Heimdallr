@@ -5,6 +5,8 @@
 pub mod cache;
 pub mod dnssec;
 pub mod filter;
+#[allow(dead_code)]
+pub mod metrics;
 pub mod rec;
 pub mod resolver;
 #[allow(dead_code)]
