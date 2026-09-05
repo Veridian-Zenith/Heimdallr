@@ -3,6 +3,7 @@
 
 #[allow(dead_code)]
 pub mod cache;
+pub mod log;
 pub mod dnssec;
 pub mod filter;
 #[allow(dead_code)]

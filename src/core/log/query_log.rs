@@ -10,7 +10,6 @@
 //! (`postgres -D /var/lib/heimdallr/pg`) before writing. Client IP stored
 //! as `inet` matching the existing `dns_logs` table schema (`client_ip` inet).
 
-use std::net::IpAddr;
 use std::time::{Duration, SystemTime};
 
 use tokio::sync::mpsc;
@@ -85,13 +84,13 @@ impl QueryLogWriter {
                     Some(event) = rx.recv() => {
                         buffer.push(event);
                         if buffer.len() >= buffer_size {
-                            flush(&url, &table, &buffer).await;
+                            flush(url.clone(), table.clone(), buffer.clone()).await;
                             buffer.clear();
                         }
                     }
                     _ = timer.tick() => {
                         if !buffer.is_empty() {
-                            flush(&url, &table, &buffer).await;
+                            flush(url.clone(), table.clone(), buffer.clone()).await;
                             buffer.clear();
                         }
                     }
@@ -100,7 +99,7 @@ impl QueryLogWriter {
             }
             // Flush remaining on shutdown.
             if !buffer.is_empty() {
-                flush(&url, &table, &buffer).await;
+                flush(url.clone(), table.clone(), buffer.clone()).await;
             }
         });
 
@@ -124,7 +123,7 @@ fn ensure_pg_instance(url: &str) -> bool {
 }
 
 /// Flush a batch of events to PostgreSQL (internal instance or user-provided).
-async fn flush(url: &str, table: &str, events: &[QueryEvent]) {
+async fn flush(url: String, table: String, events: Vec<QueryEvent>) {
     if events.is_empty() {
         return;
     }
@@ -142,11 +141,11 @@ async fn flush(url: &str, table: &str, events: &[QueryEvent]) {
     // (brief blocking acceptable for DB writes in dedicated writer task).
     tokio::task::spawn_blocking(move || {
         use postgres::{Client, NoTls};
-        match Client::connect(url, NoTls) {
+        match Client::connect(&url, NoTls) {
             Ok(mut client) => {
                 for event in events {
                     let qname = event.qname.trim_end_matches('.');
-                    let ts_str = format!("{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)); // simplified
+                    let _ts_str = format!("{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)); // simplified
                     // Note: real insert uses param binding; this is a concise M6.4 implementation matching the instance.
                     let client_str = event.client.as_str();
                     let sql = format!(

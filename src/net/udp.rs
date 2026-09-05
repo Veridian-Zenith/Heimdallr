@@ -21,6 +21,8 @@ pub struct UdpListener {
     pub cache: Arc<Cache>,
     pub filter: Arc<Filter>,
     pub cfg: Config,
+    /// M6.4: optional query log writer reference for event emission.
+    pub query_writer: Option<Arc<crate::core::log::query_log::QueryLogWriter>>,
 }
 
 impl UdpListener {
@@ -38,6 +40,7 @@ impl UdpListener {
             cache,
             filter,
             cfg,
+            query_writer: None,
         })
     }
 
@@ -97,8 +100,9 @@ async fn handle_query(
         }
     };
 
-    // Filter gate — M6 regex per-client (stub now checks exact qname)
     let client_ip = peer.ip();
+
+    // Filter gate — M6 regex per-client (stub now checks exact qname)
     if filter.is_blocked(&qname, client_ip) {
         let mut resp = Message::query();
         resp.metadata.id = req.metadata.id;
