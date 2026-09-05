@@ -149,7 +149,7 @@ pub struct RecOptionsUpdate {
     pub dns64_prefix: Option<String>,
 }
 
-#[allow(unused_variables, unused_mut)]  // M7.3 endpoint; M7.4 persistence + full RBAC follows
+#[allow(unused_variables, unused_mut)] // M7.3 endpoint; M7.4 persistence + full RBAC follows
 async fn rec_options_update(
     State(_state): State<Arc<ApiState>>,
     _payload: axum::extract::Json<RecOptionsUpdate>,
