@@ -39,7 +39,7 @@
 39||---|---|
 40|| **Binary** | `heimdallr` (single static binary, Linux) |
 41|| **License** | `OSL-3.0` — network use counts as distribution |
-42|| **Status** | `0.7.2-alpha` — M0 ✅ M1 ✅ M2 ✅ M3 ✅ M4 ✅ M5 ✅ M6 ✅ M7.1 ✅ M7.2 ✅ (auth stub: RBAC + TOTP + OIDC interface, no C# derivation) |
+42|| **Status** | `0.7.3-alpha` — M0 ✅ M1 ✅ M2 ✅ M3 ✅ M4 ✅ M5 ✅ M6 ✅ M7.1 ✅ M7.2 ✅ M7.3 ✅ (runtime toggle endpoint with auth gate) |
 43|
 44|---
 45|

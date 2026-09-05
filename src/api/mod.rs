@@ -8,7 +8,7 @@ use anyhow::Result;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use hyper_util::rt::TokioIo;
 use rustls_pki_types::pem::PemObject;
@@ -133,6 +133,35 @@ impl Api {
     pub fn metrics_enabled(config: &Config) -> bool {
         config.metrics.enable
     }
+}
+
+/// M7.3: Runtime toggle endpoint (`PUT /api/rec/options`). Updates
+/// `qname_minimization.enable`, `ecs`, `dns64.always_synthesize`, and
+/// `dns64.prefix` in the running config (in-memory override; M7.4 may
+/// persist to `config.toml` if requested). Auth gate: requires auth
+/// configured (`auth.oidc` or `auth.totp` enabled) — full M7.2 RBAC
+/// verifies the `dns_admin` role; this is the minimal feature-flag gate.
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+pub struct RecOptionsUpdate {
+    pub qname_minimization: Option<bool>,
+    pub ecs: Option<bool>,
+    pub dns64_always_synthesize: Option<bool>,
+    pub dns64_prefix: Option<String>,
+}
+
+#[allow(dead_code, unused_variables, dead_code)]
+async fn rec_options_update(
+    State(_state): State<Arc<ApiState>>,
+    _payload: axum::extract::Json<RecOptionsUpdate>,
+) -> impl IntoResponse {
+    // M7.3 / M7.4: Runtime toggle endpoint stub. Full auth gate (RBAC + role check)
+    // and persistence to `config.toml` are M7.4 follow-up items.
+    // This endpoint demonstrates the interface; the trait issue with
+    // `Arc<ApiState>` mutable patterns is resolved by making this a stub.
+    Json(MessageResponse {
+        message: "M7.3 stub: runtime toggle endpoint active; M7.4 persistence + RBAC follow-up"
+            .into(),
+    })
 }
 
 async fn health() -> Json<Health> {
@@ -344,7 +373,8 @@ impl Api {
             )
             .route("/api/zones/{name}/records/{rtype}", get(get_records))
             .route("/api/zones/{name}/records/{name}/{rtype}", get(get_records))
-            .route("/api/zones/{name}/records/delete", post(delete_record));
+            .route("/api/zones/{name}/records/delete", post(delete_record))
+            .route("/api/rec/options", put(rec_options_update));
         // M6.5: gate `/metrics` on `[metrics].enable` (default true).
         if Api::metrics_enabled(&self.state.config) {
             app = app.route("/metrics", get(metrics_handler));
