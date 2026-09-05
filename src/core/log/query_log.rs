@@ -1,4 +1,4 @@
-#![allow(unused_variables, dead_code)]
+#![allow(unused, dead_code, unused_variables, unused_mut)]
 // SPDX-License-Identifier: OSL-3.0
 // Copyright (c) 2026 Veridian Zenith
 

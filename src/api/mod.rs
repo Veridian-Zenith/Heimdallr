@@ -8,12 +8,12 @@ use anyhow::Result;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::routing::{get, post, put};
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use hyper_util::rt::TokioIo;
 use rustls_pki_types::pem::PemObject;
 use rustls_pki_types::{CertificateDer, PrivateKeyDer};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -149,7 +149,7 @@ pub struct RecOptionsUpdate {
     pub dns64_prefix: Option<String>,
 }
 
-#[expect(dead_code, unused_variables, unused_mut)] // M7.4 persistence resolves full RBAC + trait patterns
+#[expect(unused, dead_code, unused_variables, unused_mut, unused_imports)] // M7.4 persistence resolves full RBAC + trait patterns
 async fn rec_options_update(
     State(_state): State<Arc<ApiState>>,
     _payload: axum::extract::Json<RecOptionsUpdate>,
