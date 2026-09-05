@@ -81,6 +81,22 @@ async fn main() -> anyhow::Result<()> {
     );
     info!("net: listen={:?} api={}", cfg.listen, cfg.api.listen);
 
+    // M6.4: Spawn the PostgreSQL-backed query log writer if configured.
+    if cfg.log.query_log.is_some() {
+        let query_cfg = crate::core::log::query_log::QueryLogConfig {
+            postgres_url: cfg.log
+                .query_log
+                .as_ref()
+                .map(|_| crate::core::log::query_log::QueryLogConfig::default_url())
+                .unwrap_or_default()
+                .into(),
+            table: "dns_logs".into(),
+            buffer_size: 64,
+            flush_interval_ms: 100,
+        };
+        let _writer_ref = crate::core::log::query_log::QueryLogWriter::spawn(query_cfg);
+    }
+
     // Wire per docs/architecture.md — net ↔ core ↔ api (channels, not shared Mutex)
     let net = net::Net::new(cfg.clone());
     let core = core::Core::new(cfg.clone());
