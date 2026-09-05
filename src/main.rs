@@ -7,6 +7,7 @@ mod api;
 mod apps;
 mod cluster;
 mod config;
+mod auth;
 mod core;
 mod dhcp;
 mod net;
@@ -97,6 +98,10 @@ async fn main() -> anyhow::Result<()> {
         };
         let _writer_ref = crate::core::log::query_log::QueryLogWriter::spawn(query_cfg);
     }
+
+    // M7.2: Initialize auth session manager (stub — RBAC + TOTP + OIDC follows).
+    let auth_cfg = crate::auth::AuthConfig::default();
+    info!("auth: enabled={}, roles={}, totp_issuer={}", auth_cfg.enabled, auth_cfg.rbac_roles.len(), auth_cfg.totp_issuer);
 
     // Wire per docs/architecture.md — net ↔ core ↔ api (channels, not shared Mutex)
     let net = net::Net::new(cfg.clone());
