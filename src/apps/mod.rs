@@ -53,7 +53,6 @@ pub fn app_route_override(
     Some(qname.trim_end_matches('.').to_string())
 }
 
-
 #[cfg(test)]
 mod m71_tests {
     use super::*;
@@ -66,7 +65,14 @@ mod m71_tests {
         assert!(registry.apps.is_empty());
         // The stub override (before full per-subnet geo matching) returns
         // the trimmed qname — verifies the helper is callable.
-        let result = super::app_route_override(Some(&registry), std::net::IpAddr::V4(std::net::Ipv4Addr::new(192, 0, 2, 1)), "test.example.");
-        assert!(result.is_none(), "stub M7.1: empty registry -> None (will become geo/split-horizon match in M7.2)");
+        let result = super::app_route_override(
+            Some(&registry),
+            std::net::IpAddr::V4(std::net::Ipv4Addr::new(192, 0, 2, 1)),
+            "test.example.",
+        );
+        assert!(
+            result.is_none(),
+            "stub M7.1: empty registry -> None (will become geo/split-horizon match in M7.2)"
+        );
     }
 }
