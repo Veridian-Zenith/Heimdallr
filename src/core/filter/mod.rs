@@ -161,10 +161,11 @@ impl Filter {
 
 use crate::core::metrics::{MetricName, MetricsRegistry};
 
-/// M5.3: DNAME/ANAME co-existence check (RFC 6676 §2.2).
-/// Returns true if a name has both DNAME/ANAME and CNAME records.
+/// M5.3: DNAME/CNAME co-existence check (RFC 6672 §2.2).
+/// Returns true if a name has both DNAME and CNAME records, which is
+/// a protocol violation per RFC 6672 §2.2.
 pub fn dname_cname_coexistence_violation(records: &[Record]) -> bool {
-    let has_dname = records.iter().any(|r| r.record_type() == RecordType::ANAME);
+    let has_dname = records.iter().any(|r| r.record_type() == RecordType::DNAME);
     let has_cname = records.iter().any(|r| r.record_type() == RecordType::CNAME);
     has_dname && has_cname
 }

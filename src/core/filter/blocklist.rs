@@ -68,6 +68,17 @@ impl Blocklist {
         }
     }
 
+    /// Return a snapshot of all entries (for API listing).
+    pub fn entries(&self) -> Vec<String> {
+        self.entries.iter().cloned().collect()
+    }
+
+    /// Remove a single FQDN. Returns true if it was present.
+    pub fn remove(&mut self, name: &str) -> bool {
+        let n = normalize(name);
+        self.entries.remove(&n)
+    }
+
     /// True if the text is a meta-list (mostly URLs, few/no
     /// hosts-format entries). Used to decide whether to recurse.
     fn looks_like_meta_list(text: &str) -> bool {
@@ -143,6 +154,25 @@ impl Allowlist {
 
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    /// Return a snapshot of all entries (for API listing).
+    pub fn entries(&self) -> Vec<String> {
+        self.0.iter().cloned().collect()
+    }
+
+    /// Add a single FQDN (normalized).
+    pub fn insert(&mut self, name: &str) {
+        let n = normalize(name);
+        if !n.is_empty() {
+            self.0.insert(n);
+        }
+    }
+
+    /// Remove a single FQDN. Returns true if it was present.
+    pub fn remove(&mut self, name: &str) -> bool {
+        let n = normalize(name);
+        self.0.remove(&n)
     }
 
     /// Load every source. Each source may be a file path or URL.
