@@ -45,7 +45,7 @@ struct Args {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
-    let cfg = load_config(&args)?;
+    let mut cfg = load_config(&args)?;
 
     // Log level: --log-level flag > RUST_LOG env > config log.level > "info"
     let log_level = args.log_level.as_deref().unwrap_or(&cfg.log.level);
@@ -99,18 +99,27 @@ async fn main() -> anyhow::Result<()> {
         let _writer_ref = crate::core::log::query_log::QueryLogWriter::spawn(query_cfg);
     }
 
-    // M7.2: Initialize auth session manager (stub — RBAC + TOTP + OIDC follows).
-    let auth_cfg = crate::auth::AuthConfig::default();
-    info!(
-        "auth: enabled={}, roles={}, totp_issuer={}",
-        auth_cfg.enabled,
-        auth_cfg.rbac_roles.len(),
-        auth_cfg.totp_issuer
-    );
+    // M7.1: Initialize auth — auto-generate token_secret if auth enabled but secret empty.
+    if cfg.auth.enabled && cfg.auth.token_secret.is_empty() {
+        cfg.auth.token_secret = {
+            use ring::rand::SecureRandom;
+            let rng = ring::rand::SystemRandom::new();
+            let mut bytes = [0u8; 32];
+            rng.fill(&mut bytes).expect("generate token_secret");
+            base64_encode_simple(&bytes)
+        };
+        info!("auth: generated new token_secret (first start)");
+    }
+    if cfg.auth.enabled {
+        info!(
+            "auth: enabled, users={}, totp={}",
+            cfg.auth.users.len(),
+            cfg.auth.totp,
+        );
+    }
 
     // Wire per docs/architecture.md — net ↔ core ↔ api (channels, not shared Mutex)
     let net = net::Net::new(cfg.clone());
-    let core = core::Core::new(cfg.clone());
     let api = api::Api::new(cfg.clone());
     let dhcp = dhcp::Dhcp::new(cfg.dhcp.enable);
     let cluster = cluster::Cluster::new(cfg.cluster.enable);
@@ -118,7 +127,6 @@ async fn main() -> anyhow::Result<()> {
     // Spawn gates — M1+M4 tests require each listener independently testable
     tokio::try_join!(
         async { net.run().await },
-        async { core.run().await },
         async { api.run().await },
         async { dhcp.run().await },
         async { cluster.run().await },
@@ -144,4 +152,29 @@ fn load_config(args: &Args) -> anyhow::Result<config::Config> {
     }
     cfg.validate()?;
     Ok(cfg)
+}
+
+/// Minimal base64 encode for token_secret generation.
+fn base64_encode_simple(bytes: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
+        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+        out.push(TABLE[((triple >> 18) & 0x3F) as usize] as char);
+        out.push(TABLE[((triple >> 12) & 0x3F) as usize] as char);
+        if chunk.len() > 1 {
+            out.push(TABLE[((triple >> 6) & 0x3F) as usize] as char);
+        } else {
+            out.push('=');
+        }
+        if chunk.len() > 2 {
+            out.push(TABLE[(triple & 0x3F) as usize] as char);
+        } else {
+            out.push('=');
+        }
+    }
+    out
 }

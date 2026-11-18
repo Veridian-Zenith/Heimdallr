@@ -3,7 +3,7 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -58,6 +58,10 @@ pub struct Config {
     /// M5.6 / M6 — DNS64 prefix config.
     #[serde(default)]
     pub dns64: Dns64Config,
+    /// M7.1: Path where this config was loaded from (for save-back).
+    /// `None` when config was built from defaults (no file).
+    #[serde(skip)]
+    pub source_path: Option<PathBuf>,
 }
 
 fn default_host() -> String {
@@ -362,10 +366,17 @@ impl Default for ApiConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AuthConfig {
+    /// Enable auth gate. When false, all endpoints are open (backwards compatible).
+    #[serde(default)]
+    pub enabled: bool,
     #[serde(default)]
     pub users: Vec<AuthUser>,
     #[serde(default)]
     pub tokens: Vec<AuthToken>,
+    /// M7.1: Secret key for HMAC-SHA256 session tokens.
+    /// Auto-generated on first start if empty; persisted in config.
+    #[serde(default)]
+    pub token_secret: String,
     #[serde(default)]
     pub totp: bool,
     #[serde(default)]
@@ -375,13 +386,35 @@ pub struct AuthConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AuthUser {
     pub name: String,
+    /// Argon2id PHC hash (never stores plaintext).
     pub password_hash: String,
+    /// TOTP secret (base32-encoded). Empty = TOTP not enabled for this user.
+    #[serde(default)]
+    pub totp_secret: String,
+    /// Roles granted to this user (e.g. ["dns_reader", "dns_admin"]).
+    #[serde(default = "default_user_roles")]
+    pub roles: Vec<String>,
+    /// When true the user must change username + password on next login.
+    #[serde(default)]
+    pub force_password_change: bool,
+}
+
+fn default_user_roles() -> Vec<String> {
+    vec!["dns_reader".into()]
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AuthToken {
     pub name: String,
+    /// SHA-256 hash of the raw token (never stored in plaintext).
     pub value: String,
+    /// Roles granted by this token (e.g. ["dns_reader", "dns_admin"]).
+    #[serde(default = "default_token_roles")]
+    pub roles: Vec<String>,
+}
+
+fn default_token_roles() -> Vec<String> {
+    vec!["dns_reader".into()]
 }
 
 // ── Log ───────────────────────────────────────────────────────────────────────
@@ -684,17 +717,48 @@ impl Default for Config {
             zones_dir: default_zones_dir(),
             tls: TlsConfig::default(),
             dnssec_keys: DnssecKeyConfig::default(),
+            source_path: None,
         }
     }
 }
 
 impl Config {
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self> {
-        let s = std::fs::read_to_string(path.as_ref())
-            .with_context(|| format!("read {}", path.as_ref().display()))?;
-        let cfg: Self = toml::from_str(&s).context("parse toml")?;
+        let path = path.as_ref();
+        let s =
+            std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+        let mut cfg: Self = toml::from_str(&s).context("parse toml")?;
+        cfg.source_path = Some(path.to_path_buf());
         cfg.validate()?;
         Ok(cfg)
+    }
+
+    /// M7.1: Save config to disk. Writes atomically (tmp + rename) to
+    /// prevent corrupt partial writes. If no `source_path` is set,
+    /// writes to the given `path`.
+    pub fn save(&self, path: impl AsRef<Path>) -> Result<()> {
+        let path = path.as_ref();
+        let tmp = path.with_extension("toml.tmp");
+        let toml_str = toml::to_string_pretty(self).context("serialize config to toml")?;
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("create dir {}", parent.display()))?;
+        }
+        std::fs::write(&tmp, &toml_str).with_context(|| format!("write {}", tmp.display()))?;
+        std::fs::rename(&tmp, path)
+            .with_context(|| format!("rename {} -> {}", tmp.display(), path.display()))?;
+        Ok(())
+    }
+
+    /// M7.1: Save config back to its original source path.
+    /// Returns `Ok(())` if no source path is configured (no-op).
+    pub fn save_to_source(&self) -> Result<()> {
+        match &self.source_path {
+            Some(path) => self.save(path),
+            None => Ok(()),
+        }
     }
 
     /// Resolved admin email for SOA RNAME. Returns `hostadmin` if set, otherwise
@@ -977,5 +1041,52 @@ mod tests {
         let mut cfg = Config::default();
         cfg.proxy.protocol = "v3".into();
         assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn save_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test-config.toml");
+        let mut cfg = Config::default();
+        cfg.host = "ns1.example.test.".into();
+        cfg.save(&path).unwrap();
+
+        let loaded = Config::from_file(&path).unwrap();
+        assert_eq!(loaded.host, "ns1.example.test.");
+        assert_eq!(loaded.source_path, Some(path));
+    }
+
+    #[test]
+    fn save_creates_parent_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested").join("dir").join("config.toml");
+        let cfg = Config::default();
+        cfg.save(&path).unwrap();
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn save_to_source_is_noop_when_no_source() {
+        let cfg = Config::default();
+        assert!(cfg.source_path.is_none());
+        cfg.save_to_source().unwrap();
+    }
+
+    #[test]
+    fn save_to_source_writes_to_source_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("original.toml");
+        let mut cfg = Config::default();
+        cfg.host = "changed.example.test.".into();
+        cfg.save(&path).unwrap();
+
+        let mut loaded = Config::from_file(&path).unwrap();
+        assert_eq!(loaded.source_path, Some(path.clone()));
+
+        loaded.host = "updated.example.test.".into();
+        loaded.save_to_source().unwrap();
+
+        let reloaded = Config::from_file(&path).unwrap();
+        assert_eq!(reloaded.host, "updated.example.test.");
     }
 }

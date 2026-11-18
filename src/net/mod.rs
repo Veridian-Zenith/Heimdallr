@@ -5,7 +5,6 @@ pub mod cert;
 pub mod handler;
 pub mod proxy;
 pub mod tcp;
-pub mod udp;
 
 use anyhow::Result;
 use rustls::server::ResolvesServerCert;

@@ -39,7 +39,7 @@ From-zero Rust DNS server built to replace [Technitium DNS Server](https://techn
 |---|---|
 | **Binary** | `heimdallr` (single static binary, Linux) |
 | **License** | `OSL-3.0` — network use counts as distribution |
-| **Status** | `0.7.3-alpha` — M0 ✅ M1 ✅ M2 ✅ M3 ✅ M4 ✅ M5 ✅ M6 ✅ M7.1 ✅ M7.2 ✅ M7.3 ✅ (runtime toggle endpoint with auth gate) |
+| **Status** | `0.7.3-alpha` — M0 ✅ M1 ✅ M2 ✅ M3 ✅ M4 ✅ M5 ✅ M6 ✅ M7.1 ✅ M7.2 ✅ M7.3 ✅ (stubs landed, M7.1 persistence + RBAC next) |
 
 ---
 
@@ -165,7 +165,7 @@ Milestones are gates — do not start `M(n+1)` before `M(n)` passes. Linux-only;
 | Milestone | Scope |
 |-----------|-------|
 | **M6** Filtering, Apps & Observability | Blocklists (hosts/AdGuard/meta-list) ✅, regex per-client ✅, persistent cache (`cache.bin` JSON) ✅, query log (`dns_logs` PG table) ✅, Prometheus metrics (OpenMetrics) ✅, full HTTP API (stub), sinkhole config ✅, per-client ACL (CIDR) ✅ | v0.6.5-alpha |
-| **M7** Administration & Hardening | Web console (axum + static files, dark mode), multi-user RBAC + API tokens, TOTP 2FA, OIDC SSO, system logging, split-horizon/geo via Apps |
+| **M7** Administration & Hardening | M7.1 Config persistence + RBAC enforcement ✅ stub → real · M7.2 Auth layer (argon2id, tokens, TOTP) · M7.3 Runtime toggle (in-memory config update) · M7.4 Apps (split-horizon/geo routing) |
 | **M8** Auxiliary Services | Built-in DHCP server, HTTP/SOCKS5 proxy routing (incl. Tor), clustering, Docker, systemd |
 | **M9** Full Parity & Migration | XFR-over-TLS/QUIC, TSIG RFC 8945, Dynamic Updates RFC 2136, WeightedRoundRobin/Failover apps, Technitium zone JSON import, benchmark target: >60k qps |
 
@@ -475,14 +475,14 @@ cargo audit
 | RFC | Title | Status |
 |-----|-------|--------|
 | 9156 | QNAME minimization | ✅ **M5.4** — `qname_min.rs` (opt-in) |
-| 7871 | EDNS Client Subnet | M5 |
+| 7871 | EDNS Client Subnet | M5 — cache key shape done, runtime extraction pending |
 | 8914 | Extended DNS Errors | ✅ M1 |
-| 7314 | EDNS EXPIRE | M5 |
-| 9460 | SVCB/HTTPS | M5 |
-| 7553 | URI | M5 |
-| 4255 | SSHFP | ✅ M5.2 |
-| 6672 | DNAME | M5 |
-| 6147 | DNS64 | M5 |
+| 7314 | EDNS EXPIRE | M5 — planned |
+| 9460 | SVCB/HTTPS | ✅ M5.1 — `zone/file.rs` parser + API CRUD |
+| 7553 | URI | M5 — planned |
+| 4255 | SSHFP | ✅ M5.2 — `zone/file.rs` parser + API CRUD |
+| 6672 | DNAME | ✅ M5.3 — `zone/file.rs` parser + `forward.rs` synthesis |
+| 6147 | DNS64 | ✅ M5.6 — `resolver/dns64.rs` AAAA synthesis |
 
 ---
 
